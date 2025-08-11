@@ -4,8 +4,11 @@ build-backend = "maturin"
 
 [project]
 name = "xml_iterator"
+description = "XML parser with streaming iterator interface, built in Rust with Python bindings"
 dynamic = ["version"]  # Specify that version is dynamic
 requires-python = ">=3.7"
+homepage = "https://github.com/cottrell/xml_iterator"
+repository = "https://github.com/cottrell/xml_iterator"
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",

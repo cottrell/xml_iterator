@@ -1,6 +1,6 @@
 # Xml Iterator
 
-A reasonably fast XML parser for Python with streaming iterator interface and protection against infinite depth attacks.
+An XML parser for Python with streaming iterator interface and protection against infinite depth attacks.
 
 ## Features
 
