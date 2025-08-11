@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install test dependencies
+        run: pip install pytest
+      - name: Debug environment
+        run: |
+          python --version
+          file $(which python) || true  # macOS/Windows compatible
+          uname -a || systeminfo  # Platform info
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release -o dist --interpreter python${{ matrix.python-version }}
+      - name: List wheels
+        run: ls -l dist/
+      - name: Install wheel
+        run: |
+          python -m pip install --find-links dist --no-index xml_iterator
+      - name: Debug installation
+        shell: bash
+        run: |
+          echo "=== Current directory ==="
+          pwd
+          ls -la xml_iterator/ || dir xml_iterator\
+          echo "=== Test import from different directory ==="
+          cd /tmp && python -c "from xml_iterator.xml_iterator import iter_xml; print('SUCCESS: iter_xml imported')"
+      - name: Run tests
+        run: |
+          mv xml_iterator xml_iterator_src
+          make test
+          mv xml_iterator_src xml_iterator
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: dist
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    if: "startsWith(github.ref, 'refs/tags/')"
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Combine wheels
+        run: |
+          mkdir dist
+          cp artifacts/wheels-*/* dist/
+      - name: Publish to PyPI
+        uses: PyO3/maturin-action@v1
+        env:
+          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        with:
+          command: upload
+          args: --skip-existing dist/*
