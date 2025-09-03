@@ -7,7 +7,6 @@ An XML parser for Python with streaming iterator interface and protection agains
 - **Streaming XML parsing** - processes XML without loading entire document into memory
 - **Infinite depth protection** - iterator-based approach allows user-controlled limits
 - **xmltodict compatibility** - `xml_to_dict()` function produces identical results to xmltodict library
-- **High performance** - Rust implementation 1.2x faster than xmltodict, 734x faster for early termination
 - **Unicode support** - handles UTF-8 encoding correctly
 
 ## Performance
