@@ -63,9 +63,9 @@ make benchmark-real      # Real-world ESMA FIRDS XML
 ```
 
 The test suite includes:
-- ✅ **Basic functionality tests** - streaming, encoding, deep nesting
-- ✅ **xmltodict compatibility tests** - 100% exact result compatibility
-- ✅ **Performance regression tests** - ensure no slowdowns
+- **Basic functionality tests** - streaming, encoding, deep nesting
+- **xmltodict compatibility tests** - 100% exact result compatibility
+- **Performance regression tests** - ensure no slowdowns
 
 ## Example Output
 
@@ -74,7 +74,7 @@ In [1]: from xml_iterator.xml_iterator import get_edge_counts, iter_xml
 
 In [2]: get_edge_counts('simple.xml')
 xml_iterator::reading "simple.xml"
-Out[2]: 
+Out[2]:
 {('breakfast_menu', 'food', 'price'): 5,
  ('breakfast_menu', 'food', 'description'): 5,
  ('breakfast_menu', 'food'): 5,
@@ -84,7 +84,7 @@ Out[2]:
 
 In [3]: for x in iter_xml('simple.xml'):
    ...:     print(x)
-   ...: 
+   ...:
 xml_iterator::reading "simple.xml"
 (0, 'start', 'breakfast_menu')
 (1, 'start', 'food')
