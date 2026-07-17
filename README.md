@@ -1,13 +1,47 @@
 # Xml Iterator
 
-An XML parser for Python with streaming iterator interface and protection against infinite depth attacks.
+An XML parser for Python with a streaming iterator interface. Primary goal: defeat the
+**infinite depth attack** on large dumps where useful content sits under outer elements that
+stay open until late/EOF (FIRDS-like shape).
+
+Full threat model and landscape notes:
+[`backlog/docs/streaming-memory-model-and-landscape.md`](backlog/docs/streaming-memory-model-and-landscape.md).
+
+## Infinite depth attack
+
+Useful records sit **under open outer elements that do not close until much later** (often EOF).
+A tree/DOM consumer must wait for those outers to close or retain the whole open tree (memory
+grows with the file). Streaming yields each child when *it* ends, while ancestors remain open.
+
+```text
+<root>                              ← opens near start
+  <Hdr>...</Hdr>
+  <Payload>
+    <RefData>                       ← open for almost the whole file
+      <FinInstrm> ... </FinInstrm>  ← record 1 complete (outers still open)
+      <FinInstrm> ... </FinInstrm>  ← record 2
+      ...
+    </RefData>                      ← closes near EOF
+  </Payload>
+</root>
+```
+
+**Protection** is streaming at depth under open outers plus **user discard / early stop** — not
+primarily `max_depth` caps. Process each record on its `end` event, drop it, and optionally
+`break` after K records without finishing the file. Memory stays bounded only if finished work
+is discarded (keeping every child under open parents still OOMs).
+
+`max_depth` / `max_events` on `xml_to_dict` are weaker knobs (nesting/work caps). They are not
+the infinite-depth protection mechanism.
 
 ## Features
 
-- **Streaming XML parsing** - processes XML without loading entire document into memory
-- **Infinite depth protection** - iterator-based approach allows user-controlled limits
-- **xmltodict-matching output** - `xml_to_dict()` matches xmltodict output including attributes
-  (namespace prefixes are stripped; see Limitations)
+- **Streaming XML parsing** - events as tags open/close; no full DOM required
+- **Infinite depth protection** - complete inner elements under open wrappers; user-controlled
+  early stop (see above)
+- **xmltodict-matching output** - `xml_to_dict()` matches xmltodict for **modest files / parity**
+  (namespace prefixes are stripped; see Limitations). **Not** the multi-GB FIRDS path — a full
+  `xml_to_dict` rebuilds the tree and loses to infinite depth at that scale
 - **Encoding support** - UTF-8 (with or without BOM), UTF-16 with BOM, and declared
   ASCII-compatible encodings (e.g. ISO-8859-1); undecodable input raises `ValueError`
 - **Fails loudly** - malformed XML and undecodable text raise `ValueError` (no silent truncation)
@@ -17,26 +51,35 @@ An XML parser for Python with streaming iterator interface and protection agains
 All numbers require a **release build** (`make develop` / `make build`); a debug build of the
 extension is ~9x slower and was the cause of historically underwhelming benchmarks.
 
-`xml_to_dict()` vs `xmltodict.parse()` (synthetic, 2026-07-17, now including attributes):
+`xml_to_dict()` (built in Rust as of v0.2.0) vs `xmltodict.parse()` (synthetic, 2026-07-17,
+including attributes; output verified identical):
 
 | Elements | File Size | xml_iterator | xmltodict | Speedup |
 |----------|-----------|--------------|-----------|---------|
-| 500 | 0.2 MB | 0.012s | 0.014s | 1.2x |
-| 2,000 | 0.7 MB | 0.052s | 0.069s | 1.3x |
-| 5,000 | 1.8 MB | 0.270s | 0.352s | 1.3x |
+| 500 | 0.2 MB | 0.003s | 0.019s | 7.0x |
+| 2,000 | 0.7 MB | 0.011s | 0.062s | 5.6x |
+| 5,000 | 1.8 MB | 0.030s | 0.169s | 5.7x |
 
-Full-file event streaming, SwissProt.xml (110 MB, 8.0M events):
+SwissProt.xml (110 MB, 8.0M events), release build:
 
 | Approach | Time |
 |----------|------|
+| `xml_to_dict` (dict built in Rust, results identical to xmltodict) | 3.0s |
+| `xmltodict.parse` | 13.2s |
 | `iter_xml` full drain | 2.6s |
 | `iter_xml(..., attributes=True)` (10.2M events) | 3.6s |
 | stdlib `ET.iterparse` (start+end, `elem.clear()`) | 6.6s |
 | Rust `get_edge_counts` (aggregation stays in Rust) | 1.3s |
 
-On very large documents `xml_to_dict` is currently ~0.6x xmltodict (20.4s vs 12.9s on
-SwissProt): the Python-side tree build dominates there; Rust-side dict building is the
-planned fix.
+### Improvement over v0.1.4 (before 2026-07-17)
+
+| Metric | before (v0.1.4) | now (v0.2.0) | change |
+|--------|-----------------|--------------|--------|
+| `xml_to_dict` vs xmltodict, synthetic 5000 | 1.1x faster | 5.7x faster | dict built in Rust |
+| `xml_to_dict`, SwissProt 110 MB | 11.6s (no attributes) | 3.0s (with attributes) | ~3.9x, doing strictly more work |
+| `iter_xml` full drain, SwissProt | 20.5s (debug build) | 2.6s | ~7.9x (release + buffer reuse/interning) |
+| vs stdlib `ET.iterparse` (full drain) | 3.1x slower | 2.5x faster | debug-build discovery |
+| Correctness | silent truncation, panics on `<a/>`, attrs dropped | fails loudly, xmltodict parity incl. attributes | see Changes in 0.2.0 |
 
 **Early-termination advantage**: stopping after the first 1,000 events of a large file is far
 cheaper than a full parse - this is a general property of streaming iteration (any streaming
@@ -52,15 +95,20 @@ Run benchmarks yourself:
 from xml_iterator.xml_iterator import iter_xml
 from xml_iterator.core import xml_to_dict
 
-# Streaming iteration
+# Streaming: process records under open wrappers (FIRDS-like)
+records = 0
 for count, event, value in iter_xml('file.xml'):
-    print(f"{event}: {value}")
-    if count > 1000:  # User-controlled limits
-        break
+    if event == 'end' and value == 'FinInstrm':
+        records += 1
+        # handle this record; discard — do not accumulate under open parents
+        if records >= 1000:  # early stop without waiting for outer close
+            break
 
-# Convert to dictionary (xmltodict compatible)
-data = xml_to_dict('file.xml', max_depth=100, max_events=10000)
+# Full document dict — modest files / xmltodict parity only (not multi-GB FIRDS)
+data = xml_to_dict('small.xml')
 ```
+
+See `examples/firds_shape_stream.py` for a synthetic wrapper+records example.
 
 ## Testing
 
@@ -87,6 +135,7 @@ make benchmark-all       # Run both real-world benchmarks
 
 The test suite includes:
 - **Basic functionality tests** - streaming, encoding, deep nesting
+- **FIRDS-shape tests** - records under open wrappers; early break (`tests/test_firds_shape.py`)
 - **xmltodict compatibility tests** - exact result compatibility including attributes
 - **Adversarial tests** - malformed XML, encodings, CDATA, attributes, max_depth, deep nesting
 - **Performance regression tests** - ensure no slowdowns
@@ -109,6 +158,18 @@ The test suite includes:
 
 - Namespace prefixes are stripped from tag and attribute names (only local names are kept).
 - Single file input - no streaming from network/pipes (file paths only).
+- Full-file `xml_to_dict` is for modest documents and compatibility tests, not large FIRDS-as-one-tree loads.
+
+## Related tools (landscape)
+
+| Need | Prefer |
+|------|--------|
+| Records under open wrappers, stdlib | `ET.iterparse` + `elem.clear()` (or lxml) |
+| Maintained big-file streaming library | [bigxml](https://github.com/Rogdham/bigxml) |
+| Dict-shaped subtrees at a depth | xmltodict `item_depth` + callback |
+| Event tuples / edge counts / this project | `iter_xml`, `get_edge_counts` |
+
+Details: [`backlog/docs/streaming-memory-model-and-landscape.md`](backlog/docs/streaming-memory-model-and-landscape.md).
 
 ## Example Output
 
