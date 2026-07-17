@@ -23,6 +23,17 @@ late/EOF — a tree/DOM consumer either waits for those outers or holds the whol
 Threat model / landscape:
 [`backlog/docs/streaming-memory-model-and-landscape.md`](backlog/docs/streaming-memory-model-and-landscape.md).
 
+## Install
+
+[PyPI](https://pypi.org/project/xml-iterator/) — package `xml-iterator`, import `xml_iterator`.
+
+```bash
+pip install xml-iterator
+# or: uv pip install xml-iterator
+```
+
+From a clone: `make develop` (release extension; needed for honest benches/tests).
+
 ## Benchmarks
 
 Release builds only (`make develop` / `make build`). Debug extensions are ~9× slower.
