@@ -23,108 +23,99 @@ from xml_iterator.core import xml_to_dict
 
 
 # Configuration
-# Note: ESMA FIRDS URLs change daily and old URLs expire quickly, so SwissProt is used as the default stable fallback.
-# Real FIRDS URLs can be plugged in here if active:
-# FIRDS_URL = "https://firds.esma.europa.eu/firds/FULINS_D_20250531_01of03.zip"
-# FIRDS_URL = "https://firds.esma.europa.eu/firds/FULINS_S_20250531_05of05.zip"
-# Stable fallback dataset (SwissProt XML):
-FIRDS_URL = "https://aiweb.cs.washington.edu/research/projects/xmltk/xmldata/data/SwissProt/SwissProt.xml"
+SWISSPROT_NAME = "SwissProt"
+SWISSPROT_URL = "https://aiweb.cs.washington.edu/research/projects/xmltk/xmldata/data/SwissProt/SwissProt.xml"
+
+FIRDS_NAME = "ESMA FIRDS"
+FIRDS_URL = "https://firds.esma.europa.eu/firds/FULINS_D_20250531_01of03.zip"
+
 CACHE_DIR = Path("benchmark_data")
-ZIP_FILE = CACHE_DIR / os.path.basename(FIRDS_URL)
 
 
-def download_firds_data():
-    """Download XML data if not already cached"""
+def get_dataset(name, url):
+    """Download and prepare (extract if zip) the XML dataset"""
     CACHE_DIR.mkdir(exist_ok=True)
     
-    if ZIP_FILE.exists():
-        print(f"✓ Using cached file: {ZIP_FILE}")
-        return ZIP_FILE
+    filename = os.path.basename(url)
+    dest_path = CACHE_DIR / filename
     
-    data_name = "SwissProt" if "SwissProt" in FIRDS_URL else "FIRDS"
-    print(f"Downloading {data_name} data from {FIRDS_URL}")
-    print("This may take a while - file is quite large...")
-    
-    try:
-        with urllib.request.urlopen(FIRDS_URL) as response:
-            total_size = int(response.headers.get('Content-Length', 0))
-            
-            with open(ZIP_FILE, 'wb') as f:
-                downloaded = 0
-                chunk_size = 8192
-                
-                while True:
-                    chunk = response.read(chunk_size)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    
-                    if total_size > 0:
-                        percent = (downloaded / total_size) * 100
-                        print(f"\rDownloading: {percent:.1f}% ({downloaded:,} bytes)", end="", flush=True)
+    if filename.endswith('.zip'):
+        extracted_xml = dest_path.with_suffix('.xml')
+    else:
+        extracted_xml = dest_path
         
-        print(f"\n✓ Downloaded: {ZIP_FILE} ({ZIP_FILE.stat().st_size:,} bytes)")
-        return ZIP_FILE
+    if extracted_xml.exists():
+        file_size_mb = extracted_xml.stat().st_size / 1024 / 1024
+        print(f"✓ Using cached {name} XML: {extracted_xml} ({file_size_mb:.1f} MB)")
+        return str(extracted_xml)
         
-    except Exception as e:
-        print(f"\nERROR downloading file: {e}")
-        if ZIP_FILE.exists():
-            ZIP_FILE.unlink()
-        raise
-
-
-def extract_xml_from_zip(zip_path):
-    """Extract XML file from zip archive (with caching)"""
-    # Check if already extracted
-    cached_xml = zip_path.with_suffix('.xml')
-    if cached_xml.exists():
-        file_size_mb = cached_xml.stat().st_size / 1024 / 1024
-        print(f"✓ Using cached extracted XML: {cached_xml} ({file_size_mb:.1f} MB)")
-        return str(cached_xml)
-    
-    print("Extracting XML from zip archive...")
-    xml_files = []
-    
-    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-        for file_info in zip_ref.filelist:
-            if file_info.filename.endswith('.xml'):
-                xml_files.append(file_info.filename)
-    
-    if not xml_files:
-        raise ValueError("No XML files found in archive")
-    
-    # Use the first XML file found
-    xml_filename = xml_files[0]
-    print(f"Found XML file in archive: {xml_filename}")
-    
-    # Extract to cached file next to the zip
-    try:
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            with zip_ref.open(xml_filename) as xml_file:
-                with open(cached_xml, 'wb') as output_file:
-                    # Copy in chunks to handle large files
-                    copied = 0
+    # Download file
+    if not dest_path.exists():
+        print(f"Downloading {name} data from {url}")
+        print("This may take a while...")
+        try:
+            req = urllib.request.Request(
+                url, 
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+            )
+            with urllib.request.urlopen(req) as response:
+                total_size = int(response.headers.get('Content-Length', 0))
+                with open(dest_path, 'wb') as f:
+                    downloaded = 0
+                    chunk_size = 8192
                     while True:
-                        chunk = xml_file.read(8192)
+                        chunk = response.read(chunk_size)
                         if not chunk:
                             break
-                        output_file.write(chunk)
-                        copied += len(chunk)
-                        
-                        # Show progress for large files
-                        if copied % (1024 * 1024) == 0:  # Every MB
-                            print(f"  Extracted: {copied // (1024 * 1024)} MB", end='\r', flush=True)
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total_size > 0:
+                            percent = (downloaded / total_size) * 100
+                            print(f"\rDownloading: {percent:.1f}% ({downloaded:,} bytes)", end="", flush=True)
+            print(f"\n✓ Downloaded: {dest_path} ({dest_path.stat().st_size:,} bytes)")
+        except Exception as e:
+            print(f"\nERROR downloading {name} data: {e}")
+            if dest_path.exists():
+                dest_path.unlink()
+            raise
+            
+    # Extract if zip
+    if filename.endswith('.zip'):
+        print(f"Extracting XML from zip archive...")
+        xml_files = []
+        with zipfile.ZipFile(dest_path, 'r') as zip_ref:
+            for file_info in zip_ref.filelist:
+                if file_info.filename.endswith('.xml'):
+                    xml_files.append(file_info.filename)
         
-        file_size_mb = cached_xml.stat().st_size / 1024 / 1024
-        print(f"\n✓ Extracted XML file: {cached_xml} ({file_size_mb:.1f} MB)")
-        return str(cached_xml)
+        if not xml_files:
+            raise ValueError("No XML files found in zip archive")
+            
+        xml_filename = xml_files[0]
+        print(f"Found XML file in archive: {xml_filename}")
         
-    except Exception as e:
-        # Clean up partial file on error
-        if cached_xml.exists():
-            cached_xml.unlink()
-        raise e
+        try:
+            with zipfile.ZipFile(dest_path, 'r') as zip_ref:
+                with zip_ref.open(xml_filename) as xml_file:
+                    with open(extracted_xml, 'wb') as output_file:
+                        copied = 0
+                        while True:
+                            chunk = xml_file.read(8192)
+                            if not chunk:
+                                break
+                            output_file.write(chunk)
+                            copied += len(chunk)
+                            if copied % (1024 * 1024) == 0:
+                                print(f"  Extracted: {copied // (1024 * 1024)} MB", end='\r', flush=True)
+            file_size_mb = extracted_xml.stat().st_size / 1024 / 1024
+            print(f"\n✓ Extracted XML file: {extracted_xml} ({file_size_mb:.1f} MB)")
+        except Exception as e:
+            if extracted_xml.exists():
+                extracted_xml.unlink()
+            raise e
+            
+    return str(extracted_xml)
+
 
 
 def benchmark_streaming_iteration(xml_file, max_events=10000):
@@ -279,25 +270,54 @@ def benchmark_memory_efficiency(xml_file):
     print(f"  ✓ Demonstrates constant memory usage regardless of file size")
 
 
-def run_firds_benchmark():
-    """Run complete benchmark suite"""
-    data_name = "SwissProt" if "SwissProt" in FIRDS_URL else "ESMA FIRDS"
-    print(f"Real-World XML Benchmark: {data_name} Data")
+def save_results_to_json(name, file_size_mb, streaming_duration, our_duration, xml_duration):
+    """Save benchmark results to benchmark_data/benchmark_results.json"""
+    import json
+    results_file = CACHE_DIR / "benchmark_results.json"
+    
+    # Load existing results if any
+    data = {}
+    if results_file.exists():
+        try:
+            with open(results_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except Exception:
+            pass
+            
+    # Add new results
+    speedup = xml_duration / our_duration if (xml_duration and our_duration) else None
+    data[name] = {
+        "dataset": name,
+        "file_size_mb": round(file_size_mb, 2),
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "streaming_10k_events_seconds": round(streaming_duration, 4),
+        "xml_iterator_full_seconds": round(our_duration, 4) if our_duration else None,
+        "xmltodict_full_seconds": round(xml_duration, 4) if xml_duration else None,
+        "speedup_factor": round(speedup, 2) if speedup else None
+    }
+    
+    try:
+        with open(results_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4)
+        print(f"   Saved results to {results_file}")
+    except Exception as e:
+        print(f"   WARNING: failed to save results to JSON: {e}")
+
+
+def run_benchmark_for_dataset(name, url):
+    """Run complete benchmark suite for a specific dataset"""
+    print(f"\nReal-World XML Benchmark: {name} Data")
     print("=" * 50)
     
     try:
-        # Download/cache the data
-        zip_path = download_firds_data()
-        
-        # Extract XML file
-        print("\nExtracting XML file...")
-        xml_file = extract_xml_from_zip(zip_path)
+        # Download and extract the data
+        xml_file = get_dataset(name, url)
         
         file_size_mb = os.path.getsize(xml_file) / 1024 / 1024
         print(f"XML file size: {file_size_mb:.1f} MB")
         
         # Run benchmarks
-        benchmark_streaming_iteration(xml_file, max_events=10000)
+        streaming_duration, _ = benchmark_streaming_iteration(xml_file, max_events=10000)
         benchmark_memory_efficiency(xml_file)
         
         # Full file comparisons
@@ -321,23 +341,37 @@ def run_firds_benchmark():
             print(f"   xml_iterator handled file that xmltodict couldn't!")
         
         print("\n" + "=" * 50)
-        print("✅ Real-world benchmark completed successfully!")
-        data_name = "SwissProt" if "SwissProt" in xml_file else "ESMA FIRDS"
-        print(f"   File processed: {file_size_mb:.1f} MB {data_name} data")
+        print(f"✅ {name} benchmark completed successfully!")
+        print(f"   File processed: {file_size_mb:.1f} MB {name} data")
         print("   xml_iterator handled large real-world XML efficiently")
-        print(f"   Cached files: {zip_path} & {xml_file}")
-        print("   Re-run 'make benchmark-real' for instant benchmarks!")
+        
+        # Save results to JSON
+        save_results_to_json(name, file_size_mb, streaming_duration, our_duration, xml_duration)
+        print("   Re-run for instant cached benchmarks!")
             
     except Exception as e:
-        print(f"\n❌ Benchmark failed: {e}")
+        print(f"\n❌ Benchmark failed for {name}: {e}")
         return False
     
     return True
 
 
+
 if __name__ == "__main__":
     if not HAS_XMLTODICT:
         exit(1)
+        
+    import argparse
+    parser = argparse.ArgumentParser(description="Real-world XML Benchmarks")
+    parser.add_argument("--dataset", choices=["swissprot", "firds", "both"], default="swissprot",
+                        help="Which dataset to run (default: swissprot)")
+    args = parser.parse_args()
     
-    success = run_firds_benchmark()
+    success = True
+    if args.dataset in ["swissprot", "both"]:
+        success = run_benchmark_for_dataset(SWISSPROT_NAME, SWISSPROT_URL) and success
+    if args.dataset in ["firds", "both"]:
+        success = run_benchmark_for_dataset(FIRDS_NAME, FIRDS_URL) and success
+        
     exit(0 if success else 1)
+
