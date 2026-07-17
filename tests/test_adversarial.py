@@ -8,10 +8,10 @@ import os
 import tempfile
 
 import pytest
+from xml_iterator.xml_iterator import get_edge_counts, iter_xml
 
 from xml_iterator.core import get_edge_counts as py_get_edge_counts
 from xml_iterator.core import read_records, xml_to_dict
-from xml_iterator.xml_iterator import get_edge_counts, iter_xml
 
 try:
     import xmltodict
@@ -173,14 +173,7 @@ class TestAttributes:
 
     @pytest.mark.skipif(not HAS_XMLTODICT, reason="xmltodict library not available")
     def test_xml_to_dict_matches_xmltodict_with_attrs(self):
-        content = (
-            '<r>'
-            '<item id="1" ccy="EUR">100</item>'
-            '<item id="2">200</item>'
-            '<also_empty a="x"/>'
-            '<empty></empty>'
-            '</r>'
-        )
+        content = '<r><item id="1" ccy="EUR">100</item><item id="2">200</item><also_empty a="x"/><empty></empty></r>'
         xml_file = create_test_xml(content)
         try:
             ours = xml_to_dict(xml_file)

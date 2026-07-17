@@ -8,9 +8,9 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 import pytest
+from xml_iterator.xml_iterator import get_edge_counts, iter_xml
 
 from xml_iterator.core import get_edge_counts as py_get_edge_counts
-from xml_iterator.xml_iterator import get_edge_counts, iter_xml
 
 
 def create_test_xml(content):
@@ -191,8 +191,12 @@ class TestBasicParsing:
 
     def test_n_max_parameter(self):
         """Test n_max limiting in get_edge_counts"""
-        xml_content = """<?xml version="1.0"?>
-<root>""" + ''.join(f'<item>{i}</item>' for i in range(100)) + '</root>'
+        xml_content = (
+            """<?xml version="1.0"?>
+<root>"""
+            + ''.join(f'<item>{i}</item>' for i in range(100))
+            + '</root>'
+        )
 
         xml_file = create_test_xml(xml_content)
         try:
