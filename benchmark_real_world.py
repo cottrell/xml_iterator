@@ -23,23 +23,26 @@ from xml_iterator.core import xml_to_dict
 
 
 # Configuration
+# Note: ESMA FIRDS URLs change daily and old URLs expire quickly, so SwissProt is used as the default stable fallback.
+# Real FIRDS URLs can be plugged in here if active:
 # FIRDS_URL = "https://firds.esma.europa.eu/firds/FULINS_D_20250531_01of03.zip"
 # FIRDS_URL = "https://firds.esma.europa.eu/firds/FULINS_S_20250531_05of05.zip"
-# https://aiweb.cs.washington.edu/research/projects/xmltk/xmldata/
+# Stable fallback dataset (SwissProt XML):
 FIRDS_URL = "https://aiweb.cs.washington.edu/research/projects/xmltk/xmldata/data/SwissProt/SwissProt.xml"
 CACHE_DIR = Path("benchmark_data")
 ZIP_FILE = CACHE_DIR / os.path.basename(FIRDS_URL)
 
 
 def download_firds_data():
-    """Download FIRDS XML data if not already cached"""
+    """Download XML data if not already cached"""
     CACHE_DIR.mkdir(exist_ok=True)
     
     if ZIP_FILE.exists():
         print(f"✓ Using cached file: {ZIP_FILE}")
         return ZIP_FILE
     
-    print(f"Downloading FIRDS data from {FIRDS_URL}")
+    data_name = "SwissProt" if "SwissProt" in FIRDS_URL else "FIRDS"
+    print(f"Downloading {data_name} data from {FIRDS_URL}")
     print("This may take a while - file is quite large...")
     
     try:
@@ -277,8 +280,9 @@ def benchmark_memory_efficiency(xml_file):
 
 
 def run_firds_benchmark():
-    """Run complete FIRDS benchmark suite"""
-    print("Real-World XML Benchmark: ESMA FIRDS Data")
+    """Run complete benchmark suite"""
+    data_name = "SwissProt" if "SwissProt" in FIRDS_URL else "ESMA FIRDS"
+    print(f"Real-World XML Benchmark: {data_name} Data")
     print("=" * 50)
     
     try:
@@ -318,7 +322,8 @@ def run_firds_benchmark():
         
         print("\n" + "=" * 50)
         print("✅ Real-world benchmark completed successfully!")
-        print(f"   File processed: {file_size_mb:.1f} MB ESMA FIRDS data")
+        data_name = "SwissProt" if "SwissProt" in xml_file else "ESMA FIRDS"
+        print(f"   File processed: {file_size_mb:.1f} MB {data_name} data")
         print("   xml_iterator handled large real-world XML efficiently")
         print(f"   Cached files: {zip_path} & {xml_file}")
         print("   Re-run 'make benchmark-real' for instant benchmarks!")
