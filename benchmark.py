@@ -14,7 +14,7 @@ try:
     HAS_XMLTODICT = True
 except ImportError:
     HAS_XMLTODICT = False
-    print("ERROR: xmltodict required for benchmarking - install with: pip install xmltodict")
+    print("ERROR: xmltodict required for benchmarking - install with: uv pip install xmltodict")
     exit(1)
 
 from xml_iterator.core import xml_to_dict

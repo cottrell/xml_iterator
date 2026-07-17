@@ -7,12 +7,12 @@ build:
 
 develop:
 	# NOTE: installs in develop mode if that is what you want
-	maturin develop
+	maturin develop --uv
 
 .PHONY: test test-basic test-xmltodict test-performance test-fast install-test-deps benchmark
 
 install-test-deps:
-	pip install -e ".[test]"
+	uv pip install -e ".[test]"
 
 test:
 	pytest

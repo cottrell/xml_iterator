@@ -47,7 +47,7 @@ Run the test suite with pytest:
 
 ```bash
 # Install test dependencies
-pip install -e ".[test]"
+uv pip install -e ".[test]"
 
 # Run all tests
 pytest

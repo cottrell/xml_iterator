@@ -6,7 +6,7 @@ This directory contains the test suite for xml_iterator using pytest.
 
 ### Install test dependencies
 ```bash
-pip install -e ".[test]"
+uv pip install -e ".[test]"
 ```
 
 ### Run all tests
@@ -34,7 +34,7 @@ make benchmark
 
 ### Run with coverage
 ```bash
-pip install pytest-cov
+uv pip install pytest-cov
 pytest --cov=xml_iterator --cov-report=html
 ```
 
