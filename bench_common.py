@@ -132,16 +132,26 @@ def drain_streams(
 ) -> Dict[str, Dict[str, Any]]:
     """Time every available stream backend. Returns name → result dict.
 
-    Always includes every backend key. SAX full drain on large files is
-    recorded as skipped (not omitted).
+    Tasks:
+      max_events=None → full drain (SAX N/A if file > SAX_FULL_DRAIN_MAX_MB)
+      max_events=N    → early exit (SAX N/A: adapter materializes full parse first)
+
+    Always includes every backend key; ineligible → skipped=…, never omitted.
     """
     if file_mb is None:
         file_mb = os.path.getsize(path) / (1024 * 1024)
     backends = available_stream_iterators()
     out: Dict[str, Dict[str, Any]] = {}
     for name, fn in backends.items():
+        if name == "sax" and max_events is not None:
+            out[name] = {
+                "skipped": "N/A early-exit (SAX adapter materializes full parse first)"
+            }
+            continue
         if name == "sax" and max_events is None and file_mb > SAX_FULL_DRAIN_MAX_MB:
-            out[name] = {"skipped": f"full drain >{SAX_FULL_DRAIN_MAX_MB:.0f}MB (SAX buffers all events)"}
+            out[name] = {
+                "skipped": f"N/A full drain >{SAX_FULL_DRAIN_MAX_MB:.0f}MB (buffers all events)"
+            }
             continue
         try:
             t0 = time.perf_counter()
@@ -459,9 +469,9 @@ def render_benchmarks_section(data: Optional[Dict[str, Any]] = None) -> str:
         "`lxml_iterparse`. All yield `(count, event, value)`. "
         "`make benchmark` / `make benchmark-all` time **every** backend (or record an explicit skip).",
         "",
-        "**SAX note:** the SAX adapter materializes the full parse into a list before iteration, "
-        "so “first N events” still pays full-file cost. Prefer `xml_iterator` / `et` / `lxml` for "
-        "true early exit. Full SAX drain is skipped above 20 MB.",
+        "**Tasks:** *full drain* vs *early exit* (stop after N events). "
+        "SAX is **N/A for early exit** (push API → our adapter buffers the whole parse first, "
+        "so stop-at-N is not the same task). Full SAX drain is N/A above 20 MB (same buffering).",
         "",
     ]
 

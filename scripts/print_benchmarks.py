@@ -209,8 +209,9 @@ def print_pretty(data: Dict[str, Any]) -> None:
             stream_block(f"Stream first 10k events — {label} ({size})", r["stream_comparators_10k"])
 
     print(
-        "\nSAX “first N” is misleading: adapter buffers the whole parse first.\n"
-        "Raw JSON + README: make readme-benchmarks · scripts/update_readme_benchmarks.py\n"
+        "\nTasks: full drain vs early exit (first N). "
+        "SAX is N/A for early exit (adapter materializes full parse).\n"
+        "Raw JSON + README: make show-benchmarks · make readme-benchmarks\n"
     )
 
 

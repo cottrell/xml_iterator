@@ -108,8 +108,10 @@ def iter_xml_sax(path: str, attributes: bool = False) -> Iterator[EventRow]:
     """stdlib ``xml.sax`` → same event triples (materialized then iterated).
 
     SAX is push-based; we buffer the event list so the public API stays a
-    plain iterator over ``(count, event, value)``. Fine for correctness and
-    mid-size benches; full multi-GB drains hold all events in memory.
+    plain iterator over ``(count, event, value)``. That means **early exit is
+    not the same task** as true streaming: ``break`` after N still paid the
+    full parse + list. Benches mark SAX N/A for early-exit; full drain only
+    on modest files (multi-GB would hold all events in RAM).
     """
     import xml.sax
     from xml.sax.handler import ContentHandler

@@ -19,10 +19,7 @@
         "relative_to_xml_iterator": 4.04
       },
       "sax": {
-        "seconds": 7.7711,
-        "events": 10000,
-        "events_per_sec": 1287,
-        "relative_to_xml_iterator": 2904.35
+        "skipped": "N/A early-exit (SAX adapter materializes full parse first)"
       },
       "lxml_iterparse": {
         "seconds": 0.0069,
@@ -45,7 +42,7 @@
         "relative_to_xml_iterator": 3.74
       },
       "sax": {
-        "skipped": "full drain >20MB (SAX buffers all events)"
+        "skipped": "N/A full drain >20MB (buffers all events)"
       },
       "lxml_iterparse": {
         "seconds": 5.9006,
@@ -110,10 +107,7 @@
         "relative_to_xml_iterator": 0.96
       },
       "sax": {
-        "seconds": 26.0618,
-        "events": 10000,
-        "events_per_sec": 384,
-        "relative_to_xml_iterator": 2612.0
+        "skipped": "N/A early-exit (SAX adapter materializes full parse first)"
       },
       "lxml_iterparse": {
         "seconds": 0.009,

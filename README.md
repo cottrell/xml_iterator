@@ -66,7 +66,7 @@ Early stream exit (stop after 1,000 events on a 10,000-item file): **0.0003s** v
 
 Comparators in `xml_iterator.comparators`: `xml_iterator`, `et_iterparse`, `sax`, `lxml_iterparse`. All yield `(count, event, value)`. `make benchmark` / `make benchmark-all` time **every** backend (or record an explicit skip).
 
-**SAX note:** the SAX adapter materializes the full parse into a list before iteration, so “first N events” still pays full-file cost. Prefer `xml_iterator` / `et` / `lxml` for true early exit. Full SAX drain is skipped above 20 MB.
+**Tasks:** *full drain* vs *early exit* (stop after N events). SAX is **N/A for early exit** (push API → our adapter buffers the whole parse first, so stop-at-N is not the same task). Full SAX drain is N/A above 20 MB (same buffering).
 
 **Synthetic** — 2,000 books, full drain (0.7 MB, 50,002 events)
 
@@ -84,7 +84,7 @@ Comparators in `xml_iterator.comparators`: `xml_iterator`, `et_iterparse`, `sax`
 | `xml_iterator` | 2.229s | 7,967,906 | 3.6M/s | 1.00× |
 | `lxml_iterparse` | 5.901s | 7,967,906 | 1.4M/s | 2.65× slower |
 | `et_iterparse` | 8.325s | 7,967,906 | 957k/s | 3.74× slower |
-| `sax` | skipped | — | — | full drain >20MB (SAX buffers all events) |
+| `sax` | skipped | — | — | N/A full drain >20MB (buffers all events) |
 
 **SwissProt** — first 10 000 events (110 MB)
 
@@ -93,7 +93,7 @@ Comparators in `xml_iterator.comparators`: `xml_iterator`, `et_iterparse`, `sax`
 | `xml_iterator` | 0.003s | 10,000 | 3.7M/s | 1.00× |
 | `lxml_iterparse` | 0.007s | 10,000 | 1.4M/s | 2.58× slower |
 | `et_iterparse` | 0.011s | 10,000 | 926k/s | 4.04× slower |
-| `sax` | 7.771s | 10,000 | 1k/s | 2904.35× slower |
+| `sax` | skipped | — | — | N/A early-exit (SAX adapter materializes full parse first) |
 
 **ESMA FIRDS** — first 10 000 events only (441 MB; full multi-backend drain capped at 150 MB)
 
@@ -102,7 +102,7 @@ Comparators in `xml_iterator.comparators`: `xml_iterator`, `et_iterparse`, `sax`
 | `xml_iterator` | 0.010s | 10,000 | 1.0M/s | 1.00× |
 | `lxml_iterparse` | 0.009s | 10,000 | 1.1M/s | 1.11× faster |
 | `et_iterparse` | 0.010s | 10,000 | 1.0M/s | 1.00× |
-| `sax` | 26.062s | 10,000 | 384/s | 2612.00× slower |
+| `sax` | skipped | — | — | N/A early-exit (SAX adapter materializes full parse first) |
 
 ### Reproduce
 
