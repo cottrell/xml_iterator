@@ -6,8 +6,10 @@
   shared `bench_common.py`, results JSON, README tables auto-rendered from JSON.
 - `make show-benchmarks` / `scripts/print_benchmarks.py` pretty-print last results (stdlib).
 - `make readme-benchmarks` / `scripts/update_readme_benchmarks.py` rewrite README from JSON.
-- Early-exit vs full-drain treated as separate tasks; **SAX is N/A for early-exit** (adapter
-  materializes the full parse first) and for large full drains.
+- **One stream table per file:** full multi-backend drain if ≤150 MB (SwissProt); else early
+  exit first 1M events only (FIRDS). Synthetic: large full drain + early-exit vs full dict.
+- Early-exit caps large enough for signal (not 10 ms noise). **SAX is N/A for early-exit**
+  (adapter materializes full parse first); SAX full drain skipped above 20 MB (RAM).
 - Commit `benchmark_data/benchmark_results.json` snapshot (SwissProt / FIRDS / synthetic).
 
 ## 0.2.0 (2026-07-17)

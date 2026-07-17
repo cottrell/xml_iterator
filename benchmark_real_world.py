@@ -15,6 +15,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from bench_common import (
     CACHE_DIR,
+    EARLY_EXIT_EVENTS,
     FULL_STREAM_DRAIN_MAX_MB,
     drain_streams,
     json_stream_block,
@@ -98,19 +99,23 @@ def run_dataset(name: str, url: str) -> bool:
     file_mb = os.path.getsize(path) / (1024 * 1024)
     print(f"size: {file_mb:.1f} MB")
 
-    # 1) early stream (all backends)
-    stream_10k = drain_streams(path, max_events=10_000, file_mb=file_mb)
-    print_stream_table("stream backends — first 10_000 events", stream_10k)
-
-    # 2) full stream drain when cheap enough
+    # Stream policy (one stream table per file — no redundant early+full):
+    #   ≤ FULL_STREAM_DRAIN_MAX_MB → multi-backend full drain (SwissProt)
+    #   > cap                      → early exit only (FIRDS); full drain too expensive
+    stream_early = None
     stream_full = None
     if file_mb <= FULL_STREAM_DRAIN_MAX_MB:
         stream_full = drain_streams(path, max_events=None, file_mb=file_mb)
         print_stream_table("stream backends — full drain", stream_full)
     else:
-        print(f"\nfull stream drain skipped ({file_mb:.0f} MB > {FULL_STREAM_DRAIN_MAX_MB:.0f} MB cap)")
+        stream_early = drain_streams(path, max_events=EARLY_EXIT_EVENTS, file_mb=file_mb)
+        print_stream_table(
+            f"stream backends — early exit first {EARLY_EXIT_EVENTS:,} events "
+            f"(full multi-backend drain skipped >{FULL_STREAM_DRAIN_MAX_MB:.0f} MB)",
+            stream_early,
+        )
 
-    # 3) full-file dict
+    # Full-file dict (separate task)
     print("\nfull-file dict")
     our_s, our_r, our_err = time_full_dict(path)
     xt_s, xt_r, xt_err = time_xmltodict(path)
@@ -127,21 +132,26 @@ def run_dataset(name: str, url: str) -> bool:
     if our_r is not None and xt_r is not None:
         print(f"  results identical: {our_r == xt_r}")
 
-    xi_10k = stream_10k.get("xml_iterator", {})
     entry: Dict[str, Any] = {
         "kind": "real_world",
         "dataset": name,
         "file_size_mb": round(file_mb, 2),
         "timestamp": ts(),
-        "streaming_10k_events_seconds": round(xi_10k["seconds"], 4) if "seconds" in xi_10k else None,
-        "stream_comparators_10k": json_stream_block(stream_10k),
-        "stream_comparators_full": json_stream_block(stream_full) if stream_full else None,
+        "stream_policy": ("full_drain" if stream_full is not None else f"early_exit_{EARLY_EXIT_EVENTS}"),
         "xml_iterator_full_seconds": round(our_s, 4) if our_s is not None else None,
         "xmltodict_full_seconds": round(xt_s, 4) if xt_s is not None else None,
         "speedup_factor": round(xt_s / our_s, 2) if (our_s and xt_s) else None,
         "results_identical": (our_r == xt_r) if (our_r is not None and xt_r is not None) else None,
         "errors": {k: v for k, v in {"xml_to_dict": our_err, "xmltodict": xt_err}.items() if v} or None,
     }
+    if stream_full is not None:
+        entry["stream_comparators_full"] = json_stream_block(stream_full)
+    if stream_early is not None:
+        xi_e = stream_early.get("xml_iterator") or {}
+        entry["early_exit_events"] = EARLY_EXIT_EVENTS
+        entry["streaming_early_exit_seconds"] = round(xi_e["seconds"], 4) if "seconds" in xi_e else None
+        entry["stream_comparators_early"] = json_stream_block(stream_early)
+
     out = merge_results({name: entry})
     print(f"\nsaved → {out}")
     return our_err is None

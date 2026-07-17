@@ -49,59 +49,50 @@ Same output shape on synthetic / SwissProt (attributes included; namespace prefi
 
 | Elements | Size | `xml_iterator` | `xmltodict` | Speedup |
 |----------|------|----------------|-------------|---------|
-| 500 | 0.2 MB | 0.004s | 0.016s | 4.4× |
-| 2,000 | 0.7 MB | 0.012s | 0.066s | 5.5× |
-| 5,000 | 1.8 MB | 0.032s | 0.155s | 4.9× |
+| 500 | 0.2 MB | 0.007s | 0.036s | 5.5× |
+| 2,000 | 0.7 MB | 0.032s | 0.136s | 4.2× |
+| 5,000 | 1.8 MB | 0.069s | 0.229s | 3.3× |
 
 **Real files**
 
 | Dataset | Size | `xml_iterator` | `xmltodict` | Speedup | Notes |
 |---------|------|----------------|-------------|---------|-------|
-| SwissProt | 110 MB | 2.673s | 12.657s | 4.74× | results identical |
-| ESMA FIRDS | 441 MB | 8.659s | 58.421s | 6.75× | results differ (shape) |
+| SwissProt | 110 MB | 2.573s | 13.342s | 5.19× | results identical |
+| ESMA FIRDS | 441 MB | 8.451s | 54.379s | 6.43× | results differ (shape) |
 
-Early stream exit (stop after 1,000 events on a 10,000-item file): **0.0003s** vs full `xml_to_dict` **0.064s** (~229×). Any streaming parser gets this; not unique to this library.
+Early stream exit (stop after 100,000 events on a 50,000-item file): **0.028s** vs full `xml_to_dict` **0.345s** (~12×). Any streaming parser gets this; not unique to this library.
 
 ### Stream backends — same event profile
 
 Comparators in `xml_iterator.comparators`: `xml_iterator`, `et_iterparse`, `sax`, `lxml_iterparse`. All yield `(count, event, value)`. `make benchmark` / `make benchmark-all` time **every** backend (or record an explicit skip).
 
-**Tasks:** *full drain* vs *early exit* (stop after N events). SAX is **N/A for early exit** (push API → our adapter buffers the whole parse first, so stop-at-N is not the same task). Full SAX drain is N/A above 20 MB (same buffering).
+**Policy (one stream table per file):** full multi-backend drain if size ≤150 MB (e.g. SwissProt); else early exit first 1,000,000 events only (e.g. FIRDS). No redundant early+full on the same file. SAX is **N/A for early exit** (adapter materializes full parse first). SAX full drain skipped above 20 MB (RAM), not a capability gap.
 
-**Synthetic** — 2,000 books, full drain (0.7 MB, 50,002 events)
+**Synthetic** — 20,000 books, full drain (7.1 MB, 500,002 events)
 
 | Backend | Time | Events | Rate | vs `xml_iterator` |
 |---------|------|--------|------|-------------------|
-| `xml_iterator` | 0.016s | 50,002 | 3.2M/s | 1.00× |
-| `lxml_iterparse` | 0.032s | 50,002 | 1.5M/s | 2.06× slower |
-| `sax` | 0.048s | 50,002 | 1.0M/s | 3.06× slower |
-| `et_iterparse` | 0.053s | 50,002 | 940k/s | 3.38× slower |
+| `xml_iterator` | 0.200s | 500,002 | 2.5M/s | 1.00× |
+| `lxml_iterparse` | 0.466s | 500,002 | 1.1M/s | 2.33× slower |
+| `sax` | 0.813s | 500,002 | 615k/s | 4.06× slower |
+| `et_iterparse` | 1.036s | 500,002 | 482k/s | 5.18× slower |
 
 **SwissProt** — full drain (110 MB, 7,967,906 events)
 
 | Backend | Time | Events | Rate | vs `xml_iterator` |
 |---------|------|--------|------|-------------------|
-| `xml_iterator` | 2.229s | 7,967,906 | 3.6M/s | 1.00× |
-| `lxml_iterparse` | 5.901s | 7,967,906 | 1.4M/s | 2.65× slower |
-| `et_iterparse` | 8.325s | 7,967,906 | 957k/s | 3.74× slower |
-| `sax` | skipped | — | — | N/A full drain >20MB (buffers all events) |
+| `xml_iterator` | 2.088s | 7,967,906 | 3.8M/s | 1.00× |
+| `lxml_iterparse` | 5.563s | 7,967,906 | 1.4M/s | 2.66× slower |
+| `et_iterparse` | 7.496s | 7,967,906 | 1.1M/s | 3.59× slower |
+| `sax` | skipped | — | — | skipped full drain >20MB (adapter buffers all events; RAM) |
 
-**SwissProt** — first 10 000 events (110 MB)
-
-| Backend | Time | Events | Rate | vs `xml_iterator` |
-|---------|------|--------|------|-------------------|
-| `xml_iterator` | 0.003s | 10,000 | 3.7M/s | 1.00× |
-| `lxml_iterparse` | 0.007s | 10,000 | 1.4M/s | 2.58× slower |
-| `et_iterparse` | 0.011s | 10,000 | 926k/s | 4.04× slower |
-| `sax` | skipped | — | — | N/A early-exit (SAX adapter materializes full parse first) |
-
-**ESMA FIRDS** — first 10 000 events only (441 MB; full multi-backend drain capped at 150 MB)
+**ESMA FIRDS** — early exit first 1,000,000 events (441 MB; full multi-backend drain >150 MB skipped)
 
 | Backend | Time | Events | Rate | vs `xml_iterator` |
 |---------|------|--------|------|-------------------|
-| `xml_iterator` | 0.010s | 10,000 | 1.0M/s | 1.00× |
-| `lxml_iterparse` | 0.009s | 10,000 | 1.1M/s | 1.11× faster |
-| `et_iterparse` | 0.010s | 10,000 | 1.0M/s | 1.00× |
+| `xml_iterator` | 0.245s | 1,000,000 | 4.1M/s | 1.00× |
+| `et_iterparse` | 0.777s | 1,000,000 | 1.3M/s | 3.17× slower |
+| `lxml_iterparse` | 0.872s | 1,000,000 | 1.1M/s | 3.56× slower |
 | `sax` | skipped | — | — | N/A early-exit (SAX adapter materializes full parse first) |
 
 ### Reproduce

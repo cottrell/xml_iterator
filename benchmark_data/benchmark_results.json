@@ -3,156 +3,134 @@
     "kind": "real_world",
     "dataset": "SwissProt",
     "file_size_mb": 109.5,
-    "timestamp": "2026-07-17 14:15:32",
-    "streaming_10k_events_seconds": 0.0027,
-    "stream_comparators_10k": {
-      "xml_iterator": {
-        "seconds": 0.0027,
-        "events": 10000,
-        "events_per_sec": 3737382,
-        "relative_to_xml_iterator": 1.0
-      },
-      "et_iterparse": {
-        "seconds": 0.0108,
-        "events": 10000,
-        "events_per_sec": 925533,
-        "relative_to_xml_iterator": 4.04
-      },
-      "sax": {
-        "skipped": "N/A early-exit (SAX adapter materializes full parse first)"
-      },
-      "lxml_iterparse": {
-        "seconds": 0.0069,
-        "events": 10000,
-        "events_per_sec": 1446389,
-        "relative_to_xml_iterator": 2.58
-      }
-    },
+    "timestamp": "2026-07-17 14:36:13",
     "stream_comparators_full": {
       "xml_iterator": {
-        "seconds": 2.2288,
+        "seconds": 2.0884,
         "events": 7967906,
-        "events_per_sec": 3575003,
+        "events_per_sec": 3815295,
         "relative_to_xml_iterator": 1.0
       },
       "et_iterparse": {
-        "seconds": 8.325,
+        "seconds": 7.4957,
         "events": 7967906,
-        "events_per_sec": 957107,
-        "relative_to_xml_iterator": 3.74
+        "events_per_sec": 1063000,
+        "relative_to_xml_iterator": 3.59
       },
       "sax": {
-        "skipped": "N/A full drain >20MB (buffers all events)"
+        "skipped": "skipped full drain >20MB (adapter buffers all events; RAM)"
       },
       "lxml_iterparse": {
-        "seconds": 5.9006,
+        "seconds": 5.5626,
         "events": 7967906,
-        "events_per_sec": 1350363,
-        "relative_to_xml_iterator": 2.65
+        "events_per_sec": 1432416,
+        "relative_to_xml_iterator": 2.66
       }
     },
-    "xml_iterator_full_seconds": 2.6729,
-    "xmltodict_full_seconds": 12.6569,
-    "speedup_factor": 4.74,
+    "xml_iterator_full_seconds": 2.5729,
+    "xmltodict_full_seconds": 13.3417,
+    "speedup_factor": 5.19,
     "results_identical": true,
-    "errors": null
+    "errors": null,
+    "stream_policy": "full_drain"
   },
   "Synthetic_500": {
     "kind": "synthetic_dict",
     "dataset": "Synthetic (500 elements)",
     "n": 500,
     "file_size_mb": 0.1742,
-    "timestamp": "2026-07-17 14:14:10",
-    "xml_iterator_full_seconds": 0.0037,
-    "xmltodict_full_seconds": 0.0163,
-    "speedup_factor": 4.38
+    "timestamp": "2026-07-17 14:38:59",
+    "xml_iterator_full_seconds": 0.0066,
+    "xmltodict_full_seconds": 0.036,
+    "speedup_factor": 5.46
   },
   "Synthetic_2000": {
     "kind": "synthetic_dict",
     "dataset": "Synthetic (2000 elements)",
     "n": 2000,
     "file_size_mb": 0.7005,
-    "timestamp": "2026-07-17 14:14:10",
-    "xml_iterator_full_seconds": 0.0119,
-    "xmltodict_full_seconds": 0.0659,
-    "speedup_factor": 5.55
+    "timestamp": "2026-07-17 14:38:59",
+    "xml_iterator_full_seconds": 0.0321,
+    "xmltodict_full_seconds": 0.1355,
+    "speedup_factor": 4.22
   },
   "Synthetic_5000": {
     "kind": "synthetic_dict",
     "dataset": "Synthetic (5000 elements)",
     "n": 5000,
     "file_size_mb": 1.7559,
-    "timestamp": "2026-07-17 14:14:10",
-    "xml_iterator_full_seconds": 0.0315,
-    "xmltodict_full_seconds": 0.1546,
-    "speedup_factor": 4.9
+    "timestamp": "2026-07-17 14:38:59",
+    "xml_iterator_full_seconds": 0.0688,
+    "xmltodict_full_seconds": 0.2293,
+    "speedup_factor": 3.33
   },
   "ESMA FIRDS": {
     "kind": "real_world",
     "dataset": "ESMA FIRDS",
     "file_size_mb": 440.8,
-    "timestamp": "2026-07-17 14:17:06",
-    "streaming_10k_events_seconds": 0.01,
-    "stream_comparators_10k": {
+    "timestamp": "2026-07-17 14:37:18",
+    "early_exit_events": 1000000,
+    "streaming_early_exit_seconds": 0.2448,
+    "stream_comparators_early": {
       "xml_iterator": {
-        "seconds": 0.01,
-        "events": 10000,
-        "events_per_sec": 1002233,
+        "seconds": 0.2448,
+        "events": 1000000,
+        "events_per_sec": 4084938,
         "relative_to_xml_iterator": 1.0
       },
       "et_iterparse": {
-        "seconds": 0.0096,
-        "events": 10000,
-        "events_per_sec": 1040245,
-        "relative_to_xml_iterator": 0.96
+        "seconds": 0.7767,
+        "events": 1000000,
+        "events_per_sec": 1287547,
+        "relative_to_xml_iterator": 3.17
       },
       "sax": {
         "skipped": "N/A early-exit (SAX adapter materializes full parse first)"
       },
       "lxml_iterparse": {
-        "seconds": 0.009,
-        "events": 10000,
-        "events_per_sec": 1109214,
-        "relative_to_xml_iterator": 0.9
+        "seconds": 0.8715,
+        "events": 1000000,
+        "events_per_sec": 1147399,
+        "relative_to_xml_iterator": 3.56
       }
     },
-    "stream_comparators_full": null,
-    "xml_iterator_full_seconds": 8.6595,
-    "xmltodict_full_seconds": 58.4211,
-    "speedup_factor": 6.75,
+    "xml_iterator_full_seconds": 8.4512,
+    "xmltodict_full_seconds": 54.3785,
+    "speedup_factor": 6.43,
     "results_identical": false,
-    "errors": null
+    "errors": null,
+    "stream_policy": "early_exit_1000000"
   },
   "Synthetic_stream_comparators": {
     "kind": "synthetic_stream",
-    "dataset": "Synthetic stream drain (2000 books)",
-    "num_items": 2000,
-    "file_size_mb": 0.7005,
-    "timestamp": "2026-07-17 14:14:10",
+    "dataset": "Synthetic stream drain (20000 books)",
+    "num_items": 20000,
+    "file_size_mb": 7.0617,
+    "timestamp": "2026-07-17 14:38:59",
     "backends": {
       "xml_iterator": {
-        "seconds": 0.0157,
-        "events": 50002,
-        "events_per_sec": 3178091,
+        "seconds": 0.2,
+        "events": 500002,
+        "events_per_sec": 2499970,
         "relative_to_xml_iterator": 1.0
       },
       "et_iterparse": {
-        "seconds": 0.0532,
-        "events": 50002,
-        "events_per_sec": 940087,
-        "relative_to_xml_iterator": 3.38
+        "seconds": 1.0365,
+        "events": 500002,
+        "events_per_sec": 482401,
+        "relative_to_xml_iterator": 5.18
       },
       "sax": {
-        "seconds": 0.0481,
-        "events": 50002,
-        "events_per_sec": 1039643,
-        "relative_to_xml_iterator": 3.06
+        "seconds": 0.8127,
+        "events": 500002,
+        "events_per_sec": 615229,
+        "relative_to_xml_iterator": 4.06
       },
       "lxml_iterparse": {
-        "seconds": 0.0324,
-        "events": 50002,
-        "events_per_sec": 1541226,
-        "relative_to_xml_iterator": 2.06
+        "seconds": 0.4664,
+        "events": 500002,
+        "events_per_sec": 1072142,
+        "relative_to_xml_iterator": 2.33
       }
     }
   },
@@ -161,30 +139,30 @@
     "dataset": "Synthetic (100 elements)",
     "n": 100,
     "file_size_mb": 0.0346,
-    "timestamp": "2026-07-17 14:14:10",
-    "xml_iterator_full_seconds": 0.0006,
-    "xmltodict_full_seconds": 0.0038,
-    "speedup_factor": 6.28
+    "timestamp": "2026-07-17 14:38:59",
+    "xml_iterator_full_seconds": 0.0012,
+    "xmltodict_full_seconds": 0.0077,
+    "speedup_factor": 6.54
   },
   "Synthetic_1000": {
     "kind": "synthetic_dict",
     "dataset": "Synthetic (1000 elements)",
     "n": 1000,
     "file_size_mb": 0.3487,
-    "timestamp": "2026-07-17 14:14:10",
-    "xml_iterator_full_seconds": 0.0061,
-    "xmltodict_full_seconds": 0.0315,
-    "speedup_factor": 5.17
+    "timestamp": "2026-07-17 14:38:59",
+    "xml_iterator_full_seconds": 0.0141,
+    "xmltodict_full_seconds": 0.0744,
+    "speedup_factor": 5.3
   },
   "Synthetic_early_exit": {
     "kind": "synthetic_early_exit",
-    "dataset": "Early exit 1000 events vs full dict (10000 items)",
-    "num_items": 10000,
-    "max_events": 1000,
-    "file_size_mb": 3.515,
-    "timestamp": "2026-07-17 14:14:10",
-    "stream_early_seconds": 0.000281,
-    "xml_to_dict_seconds": 0.0644,
-    "ratio_dict_over_early": 229.4
+    "dataset": "Early exit 100000 events vs full dict (50000 items)",
+    "num_items": 50000,
+    "max_events": 100000,
+    "file_size_mb": 17.7018,
+    "timestamp": "2026-07-17 14:39:20",
+    "stream_early_seconds": 0.027918,
+    "xml_to_dict_seconds": 0.3449,
+    "ratio_dict_over_early": 12.4
   }
 }

@@ -31,9 +31,12 @@ from bench_common import (
 # Full matrix for JSON; README subset below
 DICT_SIZES = [100, 500, 1000, 2000, 5000]
 README_DICT_SIZES = {500, 2000, 5000}
-STREAM_ITEMS = 2000
-EARLY_EXIT_EVENTS = 1000
-EARLY_EXIT_ITEMS = 10000
+# Multi-backend full drain: large enough that time >> startup (~0.2s+), not 16ms noise
+STREAM_ITEMS = 20_000
+# Early stream vs full dict (capability demo): stop well before EOF so ratio is real.
+# Real-world FIRDS early-exit uses EARLY_EXIT_EVENTS (1M) from bench_common.
+EARLY_VS_DICT_ITEMS = 50_000
+EARLY_VS_DICT_EVENTS = 100_000  # ~30ms stream; full dict of 50k books still ~0.3s+
 
 
 def bench_dict_sizes(sizes: List[int], num_runs: int = 5) -> List[Dict[str, Any]]:
@@ -149,8 +152,8 @@ def main() -> None:
         stream["backends"],
     )
 
-    print("\n[3/3] early stream exit vs full dict")
-    early = bench_early_exit(EARLY_EXIT_ITEMS, EARLY_EXIT_EVENTS)
+    print("\n[3/3] early stream exit vs full dict (capability; any streamer)")
+    early = bench_early_exit(EARLY_VS_DICT_ITEMS, EARLY_VS_DICT_EVENTS)
     print(
         f"  {early['num_items']} items ({early['file_size_mb']:.2f} MB)\n"
         f"  stream first {early['max_events']} events: {early['stream_early_seconds']:.4f}s\n"

@@ -203,15 +203,20 @@ def print_pretty(data: Dict[str, Any]) -> None:
         if not isinstance(r, dict):
             continue
         size = _mb(r.get("file_size_mb", 0))
+        # One stream table per file: prefer full; else early (never both)
         if r.get("stream_comparators_full"):
             stream_block(f"Stream full drain — {label} ({size})", r["stream_comparators_full"])
-        if r.get("stream_comparators_10k"):
-            stream_block(f"Stream first 10k events — {label} ({size})", r["stream_comparators_10k"])
+        else:
+            early = r.get("stream_comparators_early") or r.get("stream_comparators_10k")
+            if early:
+                n_ev = r.get("early_exit_events") or (early.get("xml_iterator") or {}).get("events")
+                n_s = f"{n_ev:,}" if isinstance(n_ev, int) else "?"
+                stream_block(f"Stream early exit first {n_s} — {label} ({size})", early)
 
     print(
-        "\nTasks: full drain vs early exit (first N). "
-        "SAX is N/A for early exit (adapter materializes full parse).\n"
-        "Raw JSON + README: make show-benchmarks · make readme-benchmarks\n"
+        "\nPolicy: full drain if file ≤150MB else early-exit only. "
+        "SAX N/A for early-exit; large SAX full drain skipped (RAM).\n"
+        "make show-benchmarks · make readme-benchmarks\n"
     )
 
 

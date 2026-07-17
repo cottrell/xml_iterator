@@ -24,8 +24,12 @@ RESULTS_PATH = CACHE_DIR / "benchmark_results.json"
 
 # SAX materializes all events — skip full drain on large files
 SAX_FULL_DRAIN_MAX_MB = 20.0
-# Full multi-backend drain of huge files is slow; still run 10k early-exit always
+# Full multi-backend drain of huge files is slow; early-exit always runs
 FULL_STREAM_DRAIN_MAX_MB = 150.0
+
+# Early-exit cap: must be large enough that wall time >> open/startup noise.
+# 10k was ~3–10ms (useless). 1M is ~0.3s+ on SwissProt at ~3M ev/s.
+EARLY_EXIT_EVENTS = 1_000_000
 
 
 def require_bench_deps() -> None:
@@ -133,8 +137,8 @@ def drain_streams(
     """Time every available stream backend. Returns name → result dict.
 
     Tasks:
-      max_events=None → full drain (SAX N/A if file > SAX_FULL_DRAIN_MAX_MB)
-      max_events=N    → early exit (SAX N/A: adapter materializes full parse first)
+      max_events=None → full drain (SAX *can*; skip only if file > SAX_FULL_DRAIN_MAX_MB — RAM)
+      max_events=N    → early exit (SAX N/A with our adapter: materializes full parse first)
 
     Always includes every backend key; ineligible → skipped=…, never omitted.
     """
@@ -147,7 +151,10 @@ def drain_streams(
             out[name] = {"skipped": "N/A early-exit (SAX adapter materializes full parse first)"}
             continue
         if name == "sax" and max_events is None and file_mb > SAX_FULL_DRAIN_MAX_MB:
-            out[name] = {"skipped": f"N/A full drain >{SAX_FULL_DRAIN_MAX_MB:.0f}MB (buffers all events)"}
+            # Valid task; skip for safety (list holds all events), not "can't do it"
+            out[name] = {
+                "skipped": (f"skipped full drain >{SAX_FULL_DRAIN_MAX_MB:.0f}MB (adapter buffers all events; RAM)")
+            }
             continue
         try:
             t0 = time.perf_counter()
@@ -465,9 +472,12 @@ def render_benchmarks_section(data: Optional[Dict[str, Any]] = None) -> str:
         "`lxml_iterparse`. All yield `(count, event, value)`. "
         "`make benchmark` / `make benchmark-all` time **every** backend (or record an explicit skip).",
         "",
-        "**Tasks:** *full drain* vs *early exit* (stop after N events). "
-        "SAX is **N/A for early exit** (push API → our adapter buffers the whole parse first, "
-        "so stop-at-N is not the same task). Full SAX drain is N/A above 20 MB (same buffering).",
+        "**Policy (one stream table per file):** "
+        f"full multi-backend drain if size ≤{FULL_STREAM_DRAIN_MAX_MB:.0f} MB (e.g. SwissProt); "
+        f"else early exit first {EARLY_EXIT_EVENTS:,} events only (e.g. FIRDS). "
+        "No redundant early+full on the same file. "
+        "SAX is **N/A for early exit** (adapter materializes full parse first). "
+        "SAX full drain skipped above 20 MB (RAM), not a capability gap.",
         "",
     ]
 
@@ -483,36 +493,34 @@ def render_benchmarks_section(data: Optional[Dict[str, Any]] = None) -> str:
             "",
         ]
 
-    sp = data.get("SwissProt")
-    if isinstance(sp, dict):
-        if sp.get("stream_comparators_full"):
-            b = sp["stream_comparators_full"]
-            xi = b.get("xml_iterator") or {}
+    # Prefer full drain when present (SwissProt); early only when that's all we have (FIRDS).
+    # Do not show both for one dataset.
+    for key in ("SwissProt", "ESMA FIRDS"):
+        r = data.get(key)
+        if not isinstance(r, dict):
+            continue
+        label = r.get("dataset", key)
+        size = _fmt_mb(r.get("file_size_mb", 0))
+        full = r.get("stream_comparators_full")
+        early = r.get("stream_comparators_early") or r.get("stream_comparators_10k")
+        if full:
+            xi = full.get("xml_iterator") or {}
             lines += [
-                f"**SwissProt** — full drain ({_fmt_mb(sp['file_size_mb'])}, {xi.get('events', 0):,} events)",
+                f"**{label}** — full drain ({size}, {xi.get('events', 0):,} events)",
                 "",
-                _stream_md_rows(b, _backend_order(b)),
+                _stream_md_rows(full, _backend_order(full)),
                 "",
             ]
-        if sp.get("stream_comparators_10k"):
-            b = sp["stream_comparators_10k"]
+        elif early:
+            n_ev = r.get("early_exit_events") or (early.get("xml_iterator") or {}).get("events")
+            n_s = f"{n_ev:,}" if isinstance(n_ev, int) else "?"
             lines += [
-                f"**SwissProt** — first 10 000 events ({_fmt_mb(sp['file_size_mb'])})",
+                f"**{label}** — early exit first {n_s} events ({size}; "
+                f"full multi-backend drain >{FULL_STREAM_DRAIN_MAX_MB:.0f} MB skipped)",
                 "",
-                _stream_md_rows(b, _backend_order(b)),
+                _stream_md_rows(early, _backend_order(early)),
                 "",
             ]
-
-    firds = data.get("ESMA FIRDS")
-    if isinstance(firds, dict) and firds.get("stream_comparators_10k"):
-        b = firds["stream_comparators_10k"]
-        lines += [
-            f"**ESMA FIRDS** — first 10 000 events only "
-            f"({_fmt_mb(firds['file_size_mb'])}; full multi-backend drain capped at 150 MB)",
-            "",
-            _stream_md_rows(b, _backend_order(b)),
-            "",
-        ]
 
     lines += [
         "### Reproduce",
