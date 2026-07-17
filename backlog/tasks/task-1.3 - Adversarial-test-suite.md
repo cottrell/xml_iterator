@@ -1,11 +1,11 @@
 ---
 id: TASK-1.3
 title: Adversarial test suite
-status: In Progress
+status: Done
 assignee:
   - '@claude-fable-5'
 created_date: '2026-07-17 11:12'
-updated_date: '2026-07-17 11:12'
+updated_date: '2026-07-17 11:32'
 labels: []
 dependencies: []
 parent_task_id: TASK-1
@@ -20,6 +20,12 @@ New tests/test_adversarial.py per GROK_RESPONSE.md list: self-closing tags throu
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 All new adversarial tests pass
-- [ ] #2 Existing suite passes (updated where old behavior was the bug)
+- [x] #1 All new adversarial tests pass
+- [x] #2 Existing suite passes (updated where old behavior was the bug)
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+tests/test_adversarial.py added (17 tests: self-closing, malformed-raises, encodings, CDATA, attributes incl. exact xmltodict comparison, max_depth, depth-5000, stdout hygiene); test_basic.py malformed test now requires ValueError. Full suite 37 passed.
+<!-- SECTION:FINAL_SUMMARY:END -->

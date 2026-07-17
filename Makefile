@@ -6,7 +6,10 @@ build:
 	maturin build --release
 
 develop:
-	# NOTE: installs in develop mode if that is what you want
+	# NOTE: --release matters: debug builds are ~9x slower and poison benchmarks
+	maturin develop --uv --release
+
+develop-debug:
 	maturin develop --uv
 
 .PHONY: test test-basic test-xmltodict test-performance test-fast install-test-deps benchmark
@@ -47,5 +50,5 @@ benchmark-all:
 
 clean:
 	cargo clean
-	find -name '*.so' | xargs rm -v
-	find -name '*.pyc' | xargs rm -v
+	find . -path ./.venv -prune -o -path ./target -prune -o -name '*.so' -print | xargs -r rm -v
+	find . -path ./.venv -prune -o -path ./target -prune -o -name '*.pyc' -print | xargs -r rm -v

@@ -7,6 +7,8 @@ import os
 import tempfile
 import xml.etree.ElementTree as ET
 
+import pytest
+
 from xml_iterator.core import get_edge_counts as py_get_edge_counts
 from xml_iterator.xml_iterator import get_edge_counts, iter_xml
 
@@ -212,7 +214,7 @@ class TestMalformedXML:
     """Test behavior with malformed XML"""
 
     def test_malformed_xml_handling(self):
-        """Test behavior with various malformed XML cases"""
+        """Malformed XML must raise ValueError, not silently truncate"""
         malformed_cases = [
             ('<?xml version="1.0"?><root><unclosed>', 'Unclosed tag'),
             ('<?xml version="1.0"?><root><item>text</wrong></root>', 'Mismatched tags'),
@@ -222,12 +224,7 @@ class TestMalformedXML:
         for xml_content, description in malformed_cases:
             xml_file = create_test_xml(xml_content)
             try:
-                # Should not crash, may return partial results
-                events = list(iter_xml(xml_file))
-                # Just verify we get some events without crashing
-                assert isinstance(events, list)
-            except Exception:
-                # Graceful handling of errors is also acceptable
-                pass
+                with pytest.raises(ValueError):
+                    list(iter_xml(xml_file))
             finally:
                 os.unlink(xml_file)

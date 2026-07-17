@@ -1,19 +1,3 @@
-<!-- AISWARM/NUDGE GUIDELINES START -->
-## Swarm
-
-Swarm CLI: `aiswarm` (on PATH; `make install-aiswarm` from the nudge repo).
-
-Read workflow first:
-- `aiswarm` — common commands cheat sheet
-- `aiswarm instructions overview` — required agent briefing
-- `aiswarm instructions handoff` / `tasks` — peer send and backlog dispatch
-- `aiswarm this` — this swarm's config + runtime.json path
-
-After start, machine map (not git): `/tmp/nudge-swarm/xml-iterator/runtime.json`
-
-Config: `.aiswarm/config.yaml` (cwd walk-up), `$AISWARM_CONFIG`, or explicit path.
-Messaging: `aiswarm send <pane> "msg"` (durable log). Do NOT raw `tmux send-keys`.
-<!-- AISWARM/NUDGE GUIDELINES END -->
 # CLAUDE.md - AI Context for xml_iterator
 
 ## Project Overview
@@ -133,26 +117,3 @@ This is more flexible than hard depth limits since protection logic is use-case 
 - **Performance regression**: Ensure no slowdowns
 - **Fail loudly**: malformed XML and undecodable text raise `ValueError`, no silent truncation
 
-<!-- BACKLOG.MD GUIDELINES START -->
-<!-- backlog.md-instructions-version: 1.48.0 -->
-<CRITICAL_INSTRUCTION>
-
-## Backlog.md Workflow
-
-This project uses Backlog.md for task and project management.
-
-**For every user request in this project, run `backlog instructions overview` before answering or taking action.**
-
-Use the overview to decide whether to search, read, create, or update Backlog tasks.
-
-Before task lifecycle actions, read the matching detailed guide:
-- `backlog instructions task-creation` before creating or splitting tasks
-- `backlog instructions task-execution` before planning, changing status or assignee, adding a plan or implementation notes, or implementing task work
-- `backlog instructions task-finalization` before checking acceptance criteria, writing final summaries, or moving tasks to terminal statuses
-
-Use `backlog <command> --help` before running unfamiliar commands. Help shows options, fields, and examples.
-
-Do not edit Backlog task, draft, document, decision, or milestone markdown files directly. Use the `backlog` CLI so metadata, relationships, and history stay consistent.
-
-</CRITICAL_INSTRUCTION>
-<!-- BACKLOG.MD GUIDELINES END -->

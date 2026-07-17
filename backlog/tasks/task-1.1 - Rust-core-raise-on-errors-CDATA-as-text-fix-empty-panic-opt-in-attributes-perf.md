@@ -3,11 +3,11 @@ id: TASK-1.1
 title: >-
   Rust core: raise on errors, CDATA as text, fix empty panic, opt-in attributes,
   perf
-status: In Progress
+status: Done
 assignee:
   - '@claude-fable-5'
 created_date: '2026-07-17 11:12'
-updated_date: '2026-07-17 11:12'
+updated_date: '2026-07-17 11:32'
 labels: []
 dependencies: []
 parent_task_id: TASK-1
@@ -22,10 +22,22 @@ src/lib.rs: (1) parse errors and invalid UTF-8 must raise PyValueError, not fake
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Malformed mid-file XML raises ValueError from iteration, not silent stop
-- [ ] #2 Latin-1 declared encoding without BOM raises, not silent text drop
-- [ ] #3 CDATA content appears as text events
-- [ ] #4 get_edge_counts on <root><a/></root> returns counts including the empty tag, no panic
-- [ ] #5 No stdout output on normal open
-- [ ] #6 iter_xml(path, attributes=True) yields attr events; default unchanged 3-tuples
+- [x] #1 Malformed mid-file XML raises ValueError from iteration, not silent stop
+- [x] #2 Latin-1 declared encoding without BOM raises, not silent text drop
+- [x] #3 CDATA content appears as text events
+- [x] #4 get_edge_counts on <root><a/></root> returns counts including the empty tag, no panic
+- [x] #5 No stdout output on normal open
+- [x] #6 iter_xml(path, attributes=True) yields attr events; default unchanged 3-tuples
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented by Sonnet subagent per Fable spec; diff reviewed by Fable. Verified: pytest 37 passed; probe scripts confirm ValueError on malformed mid-file and Latin-1-no-BOM, CDATA-as-text, empty-tag counting, attr events, silent stdout. Deviation: added open_depth EOF check since quick-xml 0.26 does not flag truncated docs.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+src/lib.rs redesigned: Result-based iterator raising PyValueError (no silent EOF), CDATA as text, empty handled in get_edge_counts (panic removed) with allow_threads, println! removed, buffer reuse + interned event names, opt-in attr events. Verified via tests/test_adversarial.py + full suite (37 passed).
+<!-- SECTION:FINAL_SUMMARY:END -->

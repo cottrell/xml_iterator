@@ -9,7 +9,7 @@ def get_edge_counts(filename, n_max=None):
 
         <a ...><b ...><c ...>....
 
-    and note that we only count start events.
+    and note that we only count start and self-closing events.
     """
     iter_in = iter_xml(filename)
     counter = defaultdict(int)
@@ -18,6 +18,9 @@ def get_edge_counts(filename, n_max=None):
         if event == 'start':
             tag_stack.append(value)
             key = tuple(tag_stack)
+            counter[key] += 1
+        elif event == 'empty':
+            key = tuple(tag_stack + [value])
             counter[key] += 1
         elif event == 'end':
             assert tag_stack[-1] == value, f'{value} != {tag_stack[-1]}'
@@ -45,6 +48,10 @@ def read_records(filename, n_max=None):
             back.append(cur)
             cur = cur[-1][value]
             tag_stack.append(value)
+        elif event == 'empty':
+            cur.append({value: []})
+            key = tuple(tag_stack + [value])
+            counter[key] += 1
         elif event == 'text':
             cur.append(dict(text=value))
         elif event == 'end':
@@ -53,8 +60,6 @@ def read_records(filename, n_max=None):
             counter[key] += 1
             assert tag_stack[-1] == value, f'{value} != {tag_stack[-1]}'
             tag_stack.pop()
-        else:
-            raise Exception(f'event = {event}!?')
         if n_max is not None:
             if count > n_max:
                 break
@@ -64,23 +69,10 @@ def read_records(filename, n_max=None):
     return out, counter
 
 
-def reduce_length_one_lists_recursively(x_in):
-    if isinstance(x_in, list):
-        keys = [tuple(x.keys()) for x in x_in]
-        assert max(map(len, keys)) == 1
-        if len(set(keys)) == len(keys):
-            keys = [k[0] for k in keys]
-            values = [tuple(x.values())[0] for x in x_in]
-            return {k: reduce_length_one_lists_recursively(v) for k, v in zip(keys, values) if v}
-        else:
-            return [{k: reduce_length_one_lists_recursively(v) for k, v in x.items()} for x in x_in if x]
-    else:
-        return x_in
-
-
 def xml_to_dict(filename, max_depth=None, max_events=None):
     """
-    Convert XML to dictionary structure similar to xmltodict.
+    Convert XML to dictionary structure matching xmltodict.parse output,
+    including attributes (namespace prefixes are stripped).
 
     Args:
         filename: Path to XML file
@@ -93,151 +85,112 @@ def xml_to_dict(filename, max_depth=None, max_events=None):
     stack = []
     root = None
     event_count = 0
+    last_element = None
+    skipping = 0
 
-    for count, event, value in iter_xml(filename):
+    for count, event, value in iter_xml(filename, attributes=True):
         event_count += 1
 
-        # Optional limits for protection
-        if max_events and event_count > max_events:
+        if max_events is not None and event_count > max_events:
             break
-        if max_depth and len(stack) > max_depth:
-            continue
 
         if event == 'start':
-            # Create new element
-            element = {'_tag': value, '_children': [], '_text': None}
-
+            if skipping:
+                skipping += 1
+                continue
+            if max_depth is not None and len(stack) >= max_depth:
+                skipping = 1
+                continue
+            element = {'_tag': value, '_attrs': {}, '_children': [], '_text': None}
             if root is None:
                 root = element
             else:
-                # Add to parent's children
                 stack[-1]['_children'].append(element)
-
             stack.append(element)
+            last_element = element
 
         elif event == 'empty':
-            # Self-closing tag - create element and don't push to stack
-            element = {'_tag': value, '_children': [], '_text': None}
-
+            if skipping or (max_depth is not None and len(stack) >= max_depth):
+                continue
+            element = {'_tag': value, '_attrs': {}, '_children': [], '_text': None}
             if root is None:
                 root = element
             else:
-                # Add to parent's children
                 stack[-1]['_children'].append(element)
+            last_element = element
+
+        elif event == 'attr':
+            if skipping:
+                continue
+            name, attr_value = value
+            if last_element is not None:
+                last_element['_attrs'][name] = attr_value
 
         elif event == 'text':
+            if skipping:
+                continue
             if stack and value.strip():
-                # Add text to current element
                 if stack[-1]['_text'] is None:
                     stack[-1]['_text'] = value
                 else:
                     stack[-1]['_text'] += value
 
         elif event == 'end':
+            if skipping:
+                skipping -= 1
+                continue
             if stack:
                 stack.pop()
 
     return _normalize_dict(root) if root else {}
 
 
-def _normalize_dict(element):
+def _normalize_dict(root):
     """
-    Convert internal representation to clean dictionary format.
+    Convert internal representation to clean dictionary format, matching
+    xmltodict.parse semantics: iterative post-order traversal (no recursion
+    limit on deep documents).
     """
-    if not element:
-        return None
+    contents = {}
+    stack = [(root, False)]
+    while stack:
+        element, visited = stack.pop()
+        elem_id = id(element)
+        if not visited:
+            stack.append((element, True))
+            for child in reversed(element['_children']):
+                stack.append((child, False))
+            continue
 
-    tag = element['_tag']
-    text = element['_text']
-    children = element['_children']
+        content = {}
+        for name, attr_value in element['_attrs'].items():
+            content[f'@{name}'] = attr_value
 
-    # Group children by tag name
-    child_groups = defaultdict(list)
-    for child in children:
-        child_tag = child['_tag']
-        normalized_child = _normalize_dict(child)
-        # Extract the content from the wrapped dict
-        if isinstance(normalized_child, dict) and child_tag in normalized_child:
-            child_groups[child_tag].append(normalized_child[child_tag])
-        else:
-            child_groups[child_tag].append(normalized_child)
+        child_groups = {}
+        child_order = []
+        for child in element['_children']:
+            child_tag = child['_tag']
+            child_content = contents[id(child)]
+            if child_tag not in child_groups:
+                child_groups[child_tag] = []
+                child_order.append(child_tag)
+            child_groups[child_tag].append(child_content)
 
-    # Convert child groups to final format
-    content = {}
-    for child_tag, child_list in child_groups.items():
-        if len(child_list) == 1:
-            content[child_tag] = child_list[0]
-        else:
-            content[child_tag] = child_list
+        for child_tag in child_order:
+            child_list = child_groups[child_tag]
+            content[child_tag] = child_list[0] if len(child_list) == 1 else child_list
 
-    # Handle text content
-    if text and text.strip():
-        if content:
-            # Mixed content - put text in special key
-            content['#text'] = text.strip()
-        else:
-            # Text-only element - return just the text
-            content = text.strip()
+        text = element['_text']
+        text = text.strip() if text else None
+        if text:
+            if content:
+                content['#text'] = text
+            else:
+                content = text
 
-    # Return None for truly empty elements
-    if not content and not text:
-        content = None
+        if not content:
+            content = None
 
-    # Always wrap in tag name to match xmltodict behavior
-    return {tag: content}
+        contents[elem_id] = content
 
-
-def xml_to_dict_simple(filename, max_events=None):
-    """
-    Simple XML to dict converter - flattens structure more aggressively.
-    Similar to xmltodict behavior.
-    """
-    stack = [{}]
-    path_stack = []
-    event_count = 0
-
-    for count, event, value in iter_xml(filename):
-        event_count += 1
-        if max_events and event_count > max_events:
-            break
-
-        if event == 'start':
-            path_stack.append(value)
-            # Create nested structure
-            current = stack[-1]
-            for tag in path_stack:
-                if tag not in current:
-                    current[tag] = {}
-                elif not isinstance(current[tag], dict):
-                    # Convert to list if multiple elements with same tag
-                    current[tag] = [current[tag], {}]
-                    current = current[tag][-1]
-                    break
-                current = current[tag]
-            stack.append(current)
-
-        elif event == 'text':
-            if stack and path_stack and value.strip():
-                current = stack[-1]
-                text_value = value.strip()
-
-                if not current:  # Empty dict - make it the text value
-                    # Need to replace in parent
-                    if len(stack) > 1:
-                        parent = stack[-2]
-                        tag = path_stack[-1]
-                        parent[tag] = text_value
-                else:
-                    # Mixed content
-                    if '#text' not in current:
-                        current['#text'] = text_value
-                    else:
-                        current['#text'] += ' ' + text_value
-
-        elif event == 'end':
-            if path_stack:
-                path_stack.pop()
-            if len(stack) > 1:
-                stack.pop()
-
-    return stack[0]
+    return {root['_tag']: contents[id(root)]}

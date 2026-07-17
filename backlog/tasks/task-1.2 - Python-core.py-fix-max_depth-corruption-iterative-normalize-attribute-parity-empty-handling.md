@@ -3,11 +3,11 @@ id: TASK-1.2
 title: >-
   Python core.py: fix max_depth corruption, iterative normalize, attribute
   parity, empty handling
-status: In Progress
+status: Done
 assignee:
   - '@claude-fable-5'
 created_date: '2026-07-17 11:12'
-updated_date: '2026-07-17 11:12'
+updated_date: '2026-07-17 11:32'
 labels: []
 dependencies: []
 parent_task_id: TASK-1
@@ -22,8 +22,20 @@ xml_iterator/core.py: (1) xml_to_dict max_depth must skip whole subtrees without
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 xml_to_dict output equals xmltodict.parse on attribute-rich documents
-- [ ] #2 max_depth=2 on <r><deep><x><y>v</y></x></deep><flat>f</flat></r> keeps flat
-- [ ] #3 xml_to_dict succeeds at depth 5000
-- [ ] #4 Python get_edge_counts counts self-closing tags
+- [x] #1 xml_to_dict output equals xmltodict.parse on attribute-rich documents
+- [x] #2 max_depth=2 on <r><deep><x><y>v</y></x></deep><flat>f</flat></r> keeps flat
+- [x] #3 xml_to_dict succeeds at depth 5000
+- [x] #4 Python get_edge_counts counts self-closing tags
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Verified: xml_to_dict == xmltodict.parse on attribute-rich docs (test + probe); max_depth=2 keeps flat sibling {'r': {'deep': None, 'flat': 'f'}}; depth-5000 parses (iterative post-order normalize); py get_edge_counts counts self-closing. Deleted unused xml_to_dict_simple + reduce_length_one_lists_recursively.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+core.py: max_depth skip-counter (no sibling absorption), iterative _normalize_dict, attribute parity via iter_xml(attributes=True) + last_element attachment, empty handling in get_edge_counts/read_records, dead code removed. Verified by adversarial tests + probes.
+<!-- SECTION:FINAL_SUMMARY:END -->

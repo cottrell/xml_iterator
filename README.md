@@ -6,20 +6,40 @@ An XML parser for Python with streaming iterator interface and protection agains
 
 - **Streaming XML parsing** - processes XML without loading entire document into memory
 - **Infinite depth protection** - iterator-based approach allows user-controlled limits
-- **xmltodict compatibility** - `xml_to_dict()` function produces identical results to xmltodict library
+- **xmltodict-matching output** - `xml_to_dict()` matches xmltodict output including attributes
+  (namespace prefixes are stripped; see Limitations)
 - **Unicode support** - handles UTF-8 encoding correctly
+- **Fails loudly** - malformed XML and undecodable text raise `ValueError` (no silent truncation)
 
 ## Performance
 
-Benchmarks comparing `xml_to_dict()` against `xmltodict.parse()`:
+All numbers require a **release build** (`make develop` / `make build`); a debug build of the
+extension is ~9x slower and was the cause of historically underwhelming benchmarks.
+
+`xml_to_dict()` vs `xmltodict.parse()` (synthetic, 2026-07-17, now including attributes):
 
 | Elements | File Size | xml_iterator | xmltodict | Speedup |
 |----------|-----------|--------------|-----------|---------|
-| 500 | 0.2 MB | 0.020s | 0.024s | 1.2x |
-| 2,000 | 0.7 MB | 0.095s | 0.099s | 1.1x |
-| 5,000 | 1.8 MB | 0.231s | 0.251s | 1.1x |
+| 500 | 0.2 MB | 0.012s | 0.014s | 1.2x |
+| 2,000 | 0.7 MB | 0.052s | 0.069s | 1.3x |
+| 5,000 | 1.8 MB | 0.270s | 0.352s | 1.3x |
 
-**Streaming advantage**: 734x faster when processing only first 1,000 events from large files.
+Full-file event streaming, SwissProt.xml (110 MB, 8.0M events):
+
+| Approach | Time |
+|----------|------|
+| `iter_xml` full drain | 2.6s |
+| `iter_xml(..., attributes=True)` (10.2M events) | 3.6s |
+| stdlib `ET.iterparse` (start+end, `elem.clear()`) | 6.6s |
+| Rust `get_edge_counts` (aggregation stays in Rust) | 1.3s |
+
+On very large documents `xml_to_dict` is currently ~0.6x xmltodict (20.4s vs 12.9s on
+SwissProt): the Python-side tree build dominates there; Rust-side dict building is the
+planned fix.
+
+**Early-termination advantage**: stopping after the first 1,000 events of a large file is far
+cheaper than a full parse - this is a general property of streaming iteration (any streaming
+parser, including stdlib's `ET.iterparse`, gets it), not something unique to this library.
 
 Run benchmarks yourself:
 - `make benchmark` - Synthetic data comparison vs xmltodict
@@ -66,8 +86,28 @@ make benchmark-all       # Run both real-world benchmarks
 
 The test suite includes:
 - **Basic functionality tests** - streaming, encoding, deep nesting
-- **xmltodict compatibility tests** - 100% exact result compatibility
+- **xmltodict compatibility tests** - exact result compatibility including attributes
+- **Adversarial tests** - malformed XML, encodings, CDATA, attributes, max_depth, deep nesting
 - **Performance regression tests** - ensure no slowdowns
+
+## Changes in 0.2.0
+
+- Malformed XML and undecodable text now raise `ValueError` instead of silently truncating the
+  stream or dropping text.
+- Attribute events are opt-in: `iter_xml(path, attributes=True)` yields `('attr', (name, value))`
+  events; the default (`attributes=False`) is unchanged from before.
+- `xml_to_dict` now includes attributes (as `@name` keys) and matches `xmltodict.parse` output.
+- CDATA sections are now yielded as `text` events instead of being silently dropped.
+- Self-closing tags (`<tag/>`) are now counted correctly by both `get_edge_counts`
+  implementations (Rust previously panicked; Python previously undercounted).
+- `xml_to_dict(max_depth=...)` no longer strands the parser stack and drops sibling elements.
+- `xml_to_dict` uses an iterative (non-recursive) normalization pass, so it no longer hits
+  Python's recursion limit on deeply nested documents.
+
+## Limitations
+
+- Namespace prefixes are stripped from tag and attribute names (only local names are kept).
+- Single file input - no streaming from network/pipes (file paths only).
 
 ## Example Output
 
@@ -75,7 +115,6 @@ The test suite includes:
 In [1]: from xml_iterator.xml_iterator import get_edge_counts, iter_xml
 
 In [2]: get_edge_counts('simple.xml')
-xml_iterator::reading "simple.xml"
 Out[2]:
 {('breakfast_menu', 'food', 'price'): 5,
  ('breakfast_menu', 'food', 'description'): 5,
@@ -87,7 +126,6 @@ Out[2]:
 In [3]: for x in iter_xml('simple.xml'):
    ...:     print(x)
    ...:
-xml_iterator::reading "simple.xml"
 (0, 'start', 'breakfast_menu')
 (1, 'start', 'food')
 (2, 'start', 'name')
