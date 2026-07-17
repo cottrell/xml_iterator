@@ -144,14 +144,10 @@ def drain_streams(
     out: Dict[str, Dict[str, Any]] = {}
     for name, fn in backends.items():
         if name == "sax" and max_events is not None:
-            out[name] = {
-                "skipped": "N/A early-exit (SAX adapter materializes full parse first)"
-            }
+            out[name] = {"skipped": "N/A early-exit (SAX adapter materializes full parse first)"}
             continue
         if name == "sax" and max_events is None and file_mb > SAX_FULL_DRAIN_MAX_MB:
-            out[name] = {
-                "skipped": f"N/A full drain >{SAX_FULL_DRAIN_MAX_MB:.0f}MB (buffers all events)"
-            }
+            out[name] = {"skipped": f"N/A full drain >{SAX_FULL_DRAIN_MAX_MB:.0f}MB (buffers all events)"}
             continue
         try:
             t0 = time.perf_counter()
