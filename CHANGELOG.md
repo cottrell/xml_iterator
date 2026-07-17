@@ -1,6 +1,9 @@
 # Changelog
 
-## 0.2.1 (2026-07-17)
+## 0.2.13 (2026-07-17)
+
+Proper package version bump (Cargo). Tags `v0.2.11` / `v0.2.12` did not raise the
+wheel version (still 0.2.1), so PyPI never got a new release from those tags.
 
 - Benchmark suite: stream backends (`et_iterparse`, `sax`, `lxml_iterparse`) vs `xml_iterator`,
   shared `bench_common.py`, results JSON, README tables auto-rendered from JSON.
@@ -10,7 +13,11 @@
   exit first 1M events only (FIRDS). Synthetic: large full drain + early-exit vs full dict.
 - Early-exit caps large enough for signal (not 10 ms noise). **SAX is N/A for early-exit**
   (adapter materializes full parse first); SAX full drain skipped above 20 MB (RAM).
-- Commit `benchmark_data/benchmark_results.json` snapshot (SwissProt / FIRDS / synthetic).
+- Commit `benchmark_data/benchmark_results.json` snapshot; drop machine hostname from docs.
+
+## 0.2.1 (2026-07-17)
+
+Last PyPI release before 0.2.13. See tag `v0.2.1` / git history for that snapshot.
 
 ## 0.2.0 (2026-07-17)
 
