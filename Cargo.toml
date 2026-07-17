@@ -11,5 +11,5 @@ crate-type = ["cdylib"]
 [dependencies]
 encoding_rs = "0.8.31"
 encoding_rs_io = "0.1.7"
-pyo3 = { version = "0.17.1", features = ["extension-module"] }
-quick-xml = "0.26.0"
+pyo3 = { version = "0.28.1", features = ["extension-module", "abi3-py37"] }
+quick-xml = { version = "0.36.0", features = ["encoding"] }

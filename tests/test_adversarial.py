@@ -115,12 +115,13 @@ class TestMalformedXML:
 
 
 class TestEncoding:
-    def test_latin1_declared_no_bom_raises(self):
+    def test_latin1_declared_no_bom_parses(self):
         content = '<?xml version="1.0" encoding="ISO-8859-1"?><r><a>café</a></r>'
         xml_file = create_test_xml(content.encode('latin-1'), mode='wb')
         try:
-            with pytest.raises(ValueError):
-                list(iter_xml(xml_file))
+            events = list(iter_xml(xml_file))
+            texts = [v for _, e, v in events if e == 'text']
+            assert texts == ['café']
         finally:
             os.unlink(xml_file)
 
