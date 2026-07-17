@@ -159,6 +159,42 @@ def benchmark_streaming_vs_dict():
         os.unlink(xml_file)
 
 
+def save_synthetic_results(results):
+    """Save synthetic benchmark results to benchmark_data/benchmark_results.json"""
+    import json
+    from pathlib import Path
+    
+    results_dir = Path("benchmark_data")
+    results_dir.mkdir(exist_ok=True)
+    results_file = results_dir / "benchmark_results.json"
+    
+    data = {}
+    if results_file.exists():
+        try:
+            with open(results_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except Exception:
+            pass
+            
+    for size, file_mb, our_time, xml_time, speedup in results:
+        key = f"Synthetic_{size}"
+        data[key] = {
+            "dataset": f"Synthetic ({size} elements)",
+            "file_size_mb": round(file_mb, 4),
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "xml_iterator_full_seconds": round(our_time, 4),
+            "xmltodict_full_seconds": round(xml_time, 4),
+            "speedup_factor": round(speedup, 2)
+        }
+        
+    try:
+        with open(results_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4)
+        print(f"\n✓ Saved synthetic results to {results_file}")
+    except Exception as e:
+        print(f"\nWARNING: failed to save synthetic results to JSON: {e}")
+
+
 def generate_readme_table():
     """Generate benchmark table for README"""
     print("\n" + "=" * 60)
@@ -194,6 +230,8 @@ def generate_readme_table():
     for size, file_mb, our_time, xml_time, speedup in results:
         print(f"| {size:,} | {file_mb:.1f} MB | {our_time:.3f}s | {xml_time:.3f}s | {speedup:.1f}x |")
     print("```")
+    
+    save_synthetic_results(results)
 
 
 if __name__ == "__main__":
