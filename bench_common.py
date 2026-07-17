@@ -514,10 +514,12 @@ def render_benchmarks_section(data: Optional[Dict[str, Any]] = None) -> str:
         "```bash",
         "make benchmark          # synthetic dict + stream + early-exit → JSON",
         "make benchmark-all      # SwissProt + FIRDS → JSON",
-        "make readme-benchmarks  # rewrite tables below from JSON (no re-run)",
+        "make show-benchmarks    # pretty-print last JSON (no rebuild)",
+        "make readme-benchmarks  # rewrite this section from JSON (no re-run)",
         "```",
         "",
-        "Makefile installs `.[bench]` (`xmltodict`, `lxml`) and a **release** extension first.",
+        "Makefile installs `.[bench]` (`xmltodict`, `lxml`) and a **release** extension first. "
+        "Committed snapshot: [`benchmark_data/benchmark_results.json`](benchmark_data/benchmark_results.json).",
     ]
     return "\n".join(lines) + "\n"
 

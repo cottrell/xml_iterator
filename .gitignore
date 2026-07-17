@@ -71,6 +71,8 @@ docs/_build/
 # Pyenv
 .python-version
 
-# Benchmark data cache
-benchmark_data/
+# Benchmark downloads (large XML); keep committed summary JSON
+benchmark_data/*
+!benchmark_data/benchmark_results.json
 graphify-out/
+
