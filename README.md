@@ -51,14 +51,29 @@ Synthetic (attrs, identical results):
 
 | Elements | Size | `xml_iterator.xml_to_dict` | `xmltodict.parse` | Speedup |
 |----------|------|----------------------------|-------------------|---------|
-| 500 | 0.2 MB | 0.003s | 0.019s | 7.0× |
-| 2,000 | 0.7 MB | 0.011s | 0.062s | 5.6× |
-| 5,000 | 1.8 MB | 0.030s | 0.169s | 5.7× |
+| 500 | 0.2 MB | 0.004s | 0.016s | 4.4× |
+| 2,000 | 0.7 MB | 0.012s | 0.066s | 5.5× |
+| 5,000 | 1.8 MB | 0.032s | 0.155s | 4.9× |
 
 SwissProt (110 MB): **`xml_iterator.xml_to_dict` 3.0s** vs **`xmltodict.parse` 13.2s** (4.5×).
 
 ESMA FIRDS (~441 MB full dict): **`xml_iterator.xml_to_dict` 72s** vs **`xmltodict.parse` 45s**
 (slower — full tree still loses at this scale; use streaming).
+
+### Stream backends (same event profile)
+
+`xml_iterator.comparators`: `xml_iterator`, `et_iterparse`, `sax`, `lxml_iterparse` — same
+`(count, event, value)` triples. `make benchmark` measures **all** of them once, writes JSON,
+and prints README tables from that same data (no re-run, no silent omissions).
+
+Synthetic (2,000 books, full drain, ~50k events):
+
+| Backend | Time | Rate | vs `xml_iterator` |
+|---------|------|------|-------------------|
+| `xml_iterator` | 0.016s | 3.2M ev/s | 1.00× |
+| `lxml_iterparse` | 0.032s | 1.5M ev/s | 2.1× slower |
+| `sax` | 0.048s | 1.0M ev/s | 3.1× slower |
+| `et_iterparse` | 0.053s | 0.9M ev/s | 3.4× slower |
 
 ### Streaming / other APIs (SwissProt 110 MB)
 
@@ -69,8 +84,9 @@ ESMA FIRDS (~441 MB full dict): **`xml_iterator.xml_to_dict` 72s** vs **`xmltodi
 | stdlib `ET.iterparse` (start+end, `elem.clear()`) | 6.6s |
 | `xml_iterator.get_edge_counts` (aggregation in Rust) | 1.3s |
 
-Reproduce: `make benchmark` (synthetic), `make benchmark-real` (SwissProt),
-`make benchmark-firds` / `make benchmark-all`. Needs `uv pip install -e ".[bench]"`.
+Reproduce: `make benchmark` · `make benchmark-real` · `make benchmark-firds` ·
+`make benchmark-all`. Makefile installs `.[bench]` (`xmltodict` + `lxml`) and a release
+extension automatically. Raw: [`benchmark_data/benchmark_results.json`](benchmark_data/benchmark_results.json).
 
 ## Usage
 

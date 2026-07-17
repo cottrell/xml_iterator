@@ -20,7 +20,8 @@ ensure-release: develop
 
 .PHONY: all build develop develop-debug ensure-release \
 	test test-basic test-xmltodict test-performance test-fast test-comparators \
-	install-test-deps benchmark benchmark-real benchmark-firds benchmark-all clean
+	install-test-deps install-bench-deps \
+	benchmark benchmark-real benchmark-firds benchmark-all clean
 
 install-test-deps: ensure-release
 	# pure-Python extras only after release extension is in place
@@ -46,20 +47,23 @@ test-comparators: ensure-release
 test-fast: ensure-release
 	pytest -m "not slow"
 
-# Run benchmarks comparing against xmltodict + stream comparators
-benchmark: ensure-release
+# Bench deps (xmltodict + lxml) then release extension
+install-bench-deps: ensure-release
+	uv pip install -e ".[bench]"
+	maturin develop --uv --release
+
+# Synthetic: dict + all stream backends → JSON + README tables
+benchmark: install-bench-deps
 	python benchmark.py
 
-# Run real-world benchmark with SwissProt XML file
-benchmark-real: ensure-release
+# Real-world SwissProt / FIRDS (same stream backends, same JSON schema)
+benchmark-real: install-bench-deps
 	python benchmark_real_world.py --dataset swissprot
 
-# Run real-world benchmark with large ESMA FIRDS XML file
-benchmark-firds: ensure-release
+benchmark-firds: install-bench-deps
 	python benchmark_real_world.py --dataset firds
 
-# Run all real-world benchmarks
-benchmark-all: ensure-release
+benchmark-all: install-bench-deps
 	python benchmark_real_world.py --dataset both
 
 clean:

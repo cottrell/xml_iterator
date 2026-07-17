@@ -14,6 +14,7 @@ After start, machine map (not git): `/tmp/nudge-swarm/xml-iterator/runtime.json`
 Config: `.aiswarm/config.yaml` (cwd walk-up), `$AISWARM_CONFIG`, or explicit path.
 Messaging: `aiswarm send <pane> "msg"` (durable log). Do NOT raw `tmux send-keys`.
 <!-- AISWARM/NUDGE GUIDELINES END -->
+
 # CLAUDE.md - AI Context for xml_iterator
 
 ## Project Overview
@@ -66,11 +67,16 @@ Release build, 2026-07-17 (see PERF_2026-07-17.md for the full story):
 
 | Scenario | xml_iterator | baseline | Ratio |
 |----------|-------------|----------|-------|
-| xml_to_dict (Rust-built as of TASK-2), synthetic 5000 items (1.8 MB) | 0.030s | xmltodict 0.169s | 5.7x faster |
+| xml_to_dict (Rust-built as of TASK-2), synthetic 5000 items (1.8 MB) | 0.027s | xmltodict 0.157s | 5.8x faster |
 | xml_to_dict, SwissProt 110 MB (results identical) | 3.0s | xmltodict 13.2s | 4.5x faster |
+| stream drain synthetic 2k books (~50k events) | 0.013s | et 0.043s / sax 0.044s / lxml 0.032s | ~2.5–3.5x faster |
 | iter_xml full drain, SwissProt (8.0M events) | 2.6s | ET.iterparse 6.6s | 2.5x faster |
 | Rust get_edge_counts, SwissProt | 1.3s | - | aggregation stays in Rust |
 | Early termination (stop at 1000 events) | 0.001s | N/A | early exit avoids full parse - any streaming parser gets this |
+
+Stream backends: `xml_iterator.comparators` (`et_iterparse`, `sax`, `lxml_iterparse`).
+Shared helpers in `bench_common.py` (measure once → print → JSON → README md).
+`make benchmark` / `make benchmark-real` always include every stream backend or record a skip.
 
 Before-today (v0.1.4) baseline for the same scenarios: xml_to_dict 1.1x vs xmltodict and
 SwissProt 11.6s (attribute-less, debug builds); iter_xml drain 20.5s (debug). See
@@ -174,3 +180,4 @@ Do not edit Backlog task, draft, document, decision, or milestone markdown files
 
 </CRITICAL_INSTRUCTION>
 <!-- BACKLOG.MD GUIDELINES END -->
+
