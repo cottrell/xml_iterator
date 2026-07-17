@@ -33,7 +33,8 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Install test dependencies
-        run: pip install pytest
+        # Wheel is installed below; do not `make test` / maturin develop here (needs a venv).
+        run: pip install pytest xmltodict lxml
       - name: Debug environment
         run: |
           python --version
@@ -58,9 +59,11 @@ jobs:
           echo "=== Test import from different directory ==="
           cd /tmp && python -c "from xml_iterator.xml_iterator import iter_xml; print('SUCCESS: iter_xml imported')"
       - name: Run tests
+        # Hide source package so pytest uses the installed wheel (release build).
+        shell: bash
         run: |
           mv xml_iterator xml_iterator_src
-          make test
+          pytest
           mv xml_iterator_src xml_iterator
       - name: Upload wheels
         uses: actions/upload-artifact@v4
