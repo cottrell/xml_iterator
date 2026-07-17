@@ -39,7 +39,7 @@ From a clone: `make develop` (release extension; needed for honest benches/tests
 <!-- BEGIN BENCHMARKS -->
 Release builds only (`make develop` / `make build`). Debug extensions are ~9× slower.
 
-Numbers: **2026-07-17**, machine `bleepblop`. Source of truth: [`benchmark_data/benchmark_results.json`](benchmark_data/benchmark_results.json) (regenerate this section with `make readme-benchmarks`). Narrative: [`PERF_2026-07-17.md`](PERF_2026-07-17.md).
+Numbers: **2026-07-17**. Source of truth: [`benchmark_data/benchmark_results.json`](benchmark_data/benchmark_results.json) (regenerate this section with `make readme-benchmarks`). Narrative: [`PERF_2026-07-17.md`](PERF_2026-07-17.md).
 
 ### Full-document dict — `xml_to_dict` vs `xmltodict.parse`
 

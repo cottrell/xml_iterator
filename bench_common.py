@@ -392,7 +392,7 @@ def render_benchmarks_section(data: Optional[Dict[str, Any]] = None) -> str:
     lines: List[str] = [
         "Release builds only (`make develop` / `make build`). Debug extensions are ~9× slower.",
         "",
-        f"Numbers: **{stamp.split()[0] if stamp else 'unknown'}**, machine `bleepblop`. "
+        f"Numbers: **{stamp.split()[0] if stamp else 'unknown'}**. "
         f"Source of truth: [`benchmark_data/benchmark_results.json`](benchmark_data/benchmark_results.json) "
         f"(regenerate this section with `make readme-benchmarks`). "
         f"Narrative: [`PERF_2026-07-17.md`](PERF_2026-07-17.md).",
