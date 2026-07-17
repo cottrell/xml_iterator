@@ -48,6 +48,11 @@ pytest --cov=xml_iterator --cov-report=html
   - Deep nesting
   - Malformed XML handling
 
+- **test_firds_shape.py**: Infinite depth / FIRDS-shape acceptance
+  - Records complete under wrappers that close at EOF
+  - Early break after K records
+  - Discard consumer does not accumulate O(n) under open parents
+
 - **test_xmltodict.py**: Compatibility tests with xmltodict library
   - Exact result comparisons
   - 100% compatibility with xmltodict
