@@ -1,0 +1,72 @@
+session_name: xml-iterator
+start_directory: ./
+windows:
+  - window_name: grid
+    layout: tiled
+    panes:
+      - shell_command: "codex --dangerously-bypass-approvals-and-sandbox"
+        nudge:
+          title: codex heavy
+          agent: codex
+          monitor: true
+          babysit:
+            enabled: false
+            interval_secs: 7200
+            clear_every: 1
+            long_prompt_file: prompts/worker_long.md
+            short_prompt_file: prompts/worker_short.txt
+      - shell_command: "codex --dangerously-bypass-approvals-and-sandbox -m gpt-5.4-mini"
+        nudge:
+          title: codex light
+          agent: codex
+          monitor: true
+          babysit:
+            enabled: false
+            interval_secs: 1800
+            clear_every: 6
+            long_prompt_file: prompts/worker_long.md
+            short_prompt_file: prompts/worker_short.txt
+      - shell_command: "claude --dangerously-skip-permissions"
+        nudge:
+          title: claude heavy
+          agent: claude
+          monitor: true
+          babysit:
+            enabled: false
+            interval_secs: 7200
+            clear_every: 1
+            long_prompt_file: prompts/worker_long.md
+            short_prompt_file: prompts/worker_short.txt
+      - shell_command: "claude --dangerously-skip-permissions --model haiku"
+        nudge:
+          title: claude light
+          agent: claude
+          monitor: true
+          babysit:
+            enabled: false
+            interval_secs: 1800
+            clear_every: 6
+            long_prompt_file: prompts/worker_long.md
+            short_prompt_file: prompts/worker_short.txt
+      - shell_command: "agy --dangerously-skip-permissions"
+        nudge:
+          title: antigravity
+          agent: antigravity
+          monitor: true
+          babysit:
+            enabled: false
+            interval_secs: 7200
+            clear_every: 1
+            long_prompt_file: prompts/worker_long.md
+            short_prompt_file: prompts/worker_short.txt
+      - shell_command: "grok --always-approve -m grok-build"
+        nudge:
+          title: grok
+          agent: grok
+          monitor: true
+          babysit:
+            enabled: false
+            interval_secs: 7200
+            clear_every: 1
+            long_prompt_file: prompts/worker_long.md
+            short_prompt_file: prompts/worker_short.txt
