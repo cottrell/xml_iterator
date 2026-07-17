@@ -18,8 +18,10 @@ except ImportError:
     print("ERROR: xmltodict required for benchmarking - install with: uv pip install xmltodict")
     exit(1)
 
-from xml_iterator.core import xml_to_dict
 from xml_iterator.xml_iterator import iter_xml
+
+from xml_iterator.comparators import available_stream_iterators
+from xml_iterator.core import xml_to_dict
 
 # Configuration
 SWISSPROT_NAME = "SwissProt"
@@ -38,8 +40,8 @@ def get_dataset(name, url):
     filename = os.path.basename(url)
     dest_path = CACHE_DIR / filename
 
-    if filename.endswith('.zip'):
-        extracted_xml = dest_path.with_suffix('.xml')
+    if filename.endswith(".zip"):
+        extracted_xml = dest_path.with_suffix(".xml")
     else:
         extracted_xml = dest_path
 
@@ -53,10 +55,10 @@ def get_dataset(name, url):
         print(f"Downloading {name} data from {url}")
         print("This may take a while...")
         try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
             with urllib.request.urlopen(req) as response:
-                total_size = int(response.headers.get('Content-Length', 0))
-                with open(dest_path, 'wb') as f:
+                total_size = int(response.headers.get("Content-Length", 0))
+                with open(dest_path, "wb") as f:
                     downloaded = 0
                     chunk_size = 8192
                     while True:
@@ -67,7 +69,11 @@ def get_dataset(name, url):
                         downloaded += len(chunk)
                         if total_size > 0:
                             percent = (downloaded / total_size) * 100
-                            print(f"\rDownloading: {percent:.1f}% ({downloaded:,} bytes)", end="", flush=True)
+                            print(
+                                f"\rDownloading: {percent:.1f}% ({downloaded:,} bytes)",
+                                end="",
+                                flush=True,
+                            )
             print(f"\n✓ Downloaded: {dest_path} ({dest_path.stat().st_size:,} bytes)")
         except Exception as e:
             print(f"\nERROR downloading {name} data: {e}")
@@ -76,12 +82,12 @@ def get_dataset(name, url):
             raise
 
     # Extract if zip
-    if filename.endswith('.zip'):
-        print(f"Extracting XML from zip archive...")
+    if filename.endswith(".zip"):
+        print("Extracting XML from zip archive...")
         xml_files = []
-        with zipfile.ZipFile(dest_path, 'r') as zip_ref:
+        with zipfile.ZipFile(dest_path, "r") as zip_ref:
             for file_info in zip_ref.filelist:
-                if file_info.filename.endswith('.xml'):
+                if file_info.filename.endswith(".xml"):
                     xml_files.append(file_info.filename)
 
         if not xml_files:
@@ -91,9 +97,9 @@ def get_dataset(name, url):
         print(f"Found XML file in archive: {xml_filename}")
 
         try:
-            with zipfile.ZipFile(dest_path, 'r') as zip_ref:
+            with zipfile.ZipFile(dest_path, "r") as zip_ref:
                 with zip_ref.open(xml_filename) as xml_file:
-                    with open(extracted_xml, 'wb') as output_file:
+                    with open(extracted_xml, "wb") as output_file:
                         copied = 0
                         while True:
                             chunk = xml_file.read(8192)
@@ -102,7 +108,11 @@ def get_dataset(name, url):
                             output_file.write(chunk)
                             copied += len(chunk)
                             if copied % (1024 * 1024) == 0:
-                                print(f"  Extracted: {copied // (1024 * 1024)} MB", end='\r', flush=True)
+                                print(
+                                    f"  Extracted: {copied // (1024 * 1024)} MB",
+                                    end="\r",
+                                    flush=True,
+                                )
             file_size_mb = extracted_xml.stat().st_size / 1024 / 1024
             print(f"\n✓ Extracted XML file: {extracted_xml} ({file_size_mb:.1f} MB)")
         except Exception as e:
@@ -114,8 +124,8 @@ def get_dataset(name, url):
 
 
 def benchmark_streaming_iteration(xml_file, max_events=10000):
-    """Benchmark streaming iteration with early termination"""
-    print(f"\nStreaming benchmark (first {max_events:,} events):")
+    """Benchmark streaming iteration with early termination (native only)."""
+    print(f"\nStreaming benchmark (first {max_events:,} events, xml_iterator):")
 
     start_time = time.perf_counter()
     count = 0
@@ -129,9 +139,44 @@ def benchmark_streaming_iteration(xml_file, max_events=10000):
     duration = end_time - start_time
 
     print(f"  Processed {count:,} events in {duration:.3f}s")
-    print(f"  Rate: {count/duration:,.0f} events/second")
+    print(f"  Rate: {count / duration:,.0f} events/second")
 
     return duration, count
+
+
+def benchmark_stream_comparators(xml_file, max_events=None):
+    """Drain each stream backend with the same (count, event, value) profile.
+
+    max_events: stop after N events (early-exit comparison); None = full drain.
+    SAX buffers all events into a list — skipped for full drain above 20MB.
+    """
+    backends = available_stream_iterators()
+    file_mb = os.path.getsize(xml_file) / 1024 / 1024
+    label = f"first {max_events:,} events" if max_events else "full drain"
+    print(f"\nStream comparator benchmark ({label}):")
+    print(f"  backends: {', '.join(backends)}")
+
+    results = {}
+    for name, fn in backends.items():
+        if name == "sax" and max_events is None and file_mb > 20:
+            print(f"  {name:16} skipped full drain on {file_mb:.0f}MB (buffers all events)")
+            results[name] = None
+            continue
+        try:
+            t0 = time.perf_counter()
+            n = 0
+            for _ in fn(xml_file):
+                n += 1
+                if max_events is not None and n >= max_events:
+                    break
+            dt = time.perf_counter() - t0
+            rate = n / dt if dt > 0 else 0
+            print(f"  {name:16} {dt:8.3f}s  events={n:,}  {rate:,.0f} ev/s")
+            results[name] = {"seconds": dt, "events": n, "events_per_sec": rate}
+        except Exception as e:
+            print(f"  {name:16} ERROR: {e}")
+            results[name] = {"error": str(e)}
+    return results
 
 
 def benchmark_xmltodict_full(xml_file):
@@ -140,13 +185,13 @@ def benchmark_xmltodict_full(xml_file):
         print("  Skipping xmltodict benchmark (not available)")
         return None, None
 
-    print(f"\nxmltodict full file benchmark:")
+    print("\nxmltodict full file benchmark:")
 
     try:
-        with open(xml_file, 'r', encoding='utf-8') as f:
+        with open(xml_file, "r", encoding="utf-8") as f:
             xml_content = f.read()
 
-        file_size_mb = len(xml_content.encode('utf-8')) / 1024 / 1024
+        file_size_mb = len(xml_content.encode("utf-8")) / 1024 / 1024
         print(f"  File size: {file_size_mb:.1f} MB")
 
         start_time = time.perf_counter()
@@ -156,13 +201,13 @@ def benchmark_xmltodict_full(xml_file):
         duration = end_time - start_time
 
         print(f"  Parsed full file in {duration:.3f}s")
-        print(f"  Rate: {file_size_mb/duration:.1f} MB/second")
+        print(f"  Rate: {file_size_mb / duration:.1f} MB/second")
         print(f"  Result type: {type(result)}")
 
         return duration, result
 
     except MemoryError:
-        print(f"  ERROR: xmltodict ran out of memory")
+        print("  ERROR: xmltodict ran out of memory")
         return None, None
     except Exception as e:
         print(f"  ERROR: xmltodict failed - {e}")
@@ -171,7 +216,7 @@ def benchmark_xmltodict_full(xml_file):
 
 def benchmark_xml_to_dict_full(xml_file):
     """Benchmark our xml_to_dict on full file"""
-    print(f"\nxml_iterator xml_to_dict full file benchmark:")
+    print("\nxml_iterator xml_to_dict full file benchmark:")
 
     try:
         file_size_mb = os.path.getsize(xml_file) / 1024 / 1024
@@ -184,7 +229,7 @@ def benchmark_xml_to_dict_full(xml_file):
         duration = end_time - start_time
 
         print(f"  Converted to dict in {duration:.3f}s")
-        print(f"  Rate: {file_size_mb/duration:.1f} MB/second")
+        print(f"  Rate: {file_size_mb / duration:.1f} MB/second")
         print(f"  Result type: {type(result)}")
 
         if isinstance(result, dict):
@@ -199,7 +244,7 @@ def benchmark_xml_to_dict_full(xml_file):
 
             element_count = count_elements(result)
             print(f"  Dictionary elements: {element_count:,}")
-            print(f"  Rate: {element_count/duration:,.0f} elements/second")
+            print(f"  Rate: {element_count / duration:,.0f} elements/second")
 
         return duration, result
 
@@ -210,7 +255,7 @@ def benchmark_xml_to_dict_full(xml_file):
 
 def compare_results(our_result, xmltodict_result):
     """Compare results and note any differences"""
-    print(f"\nResult comparison:")
+    print("\nResult comparison:")
 
     if our_result is None and xmltodict_result is None:
         print("  Both failed - no comparison possible")
@@ -233,14 +278,14 @@ def compare_results(our_result, xmltodict_result):
             if our_keys != xml_keys:
                 print(f"     Key differences: our_only={our_keys - xml_keys}, xml_only={xml_keys - our_keys}")
             else:
-                print(f"     Same keys, different values")
+                print("     Same keys, different values")
 
         print("     (This is still a valid performance comparison)")
 
 
 def benchmark_memory_efficiency(xml_file):
     """Test memory efficiency with different approaches"""
-    print(f"\nMemory efficiency test:")
+    print("\nMemory efficiency test:")
 
     # Test 1: Streaming with very early termination
     start_time = time.perf_counter()
@@ -263,7 +308,7 @@ def benchmark_memory_efficiency(xml_file):
     duration = time.perf_counter() - start_time
 
     print(f"  Medium termination (100,000 events): {duration:.3f}s")
-    print(f"  ✓ Demonstrates constant memory usage regardless of file size")
+    print("  ✓ Demonstrates constant memory usage regardless of file size")
 
 
 def save_results_to_json(name, file_size_mb, streaming_duration, our_duration, xml_duration):
@@ -276,7 +321,7 @@ def save_results_to_json(name, file_size_mb, streaming_duration, our_duration, x
     data = {}
     if results_file.exists():
         try:
-            with open(results_file, 'r', encoding='utf-8') as f:
+            with open(results_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except Exception:
             pass
@@ -294,7 +339,7 @@ def save_results_to_json(name, file_size_mb, streaming_duration, our_duration, x
     }
 
     try:
-        with open(results_file, 'w', encoding='utf-8') as f:
+        with open(results_file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
         print(f"   Saved results to {results_file}")
     except Exception as e:
@@ -315,6 +360,12 @@ def run_benchmark_for_dataset(name, url):
 
         # Run benchmarks
         streaming_duration, _ = benchmark_streaming_iteration(xml_file, max_events=10000)
+        benchmark_stream_comparators(xml_file, max_events=10000)
+        # Full event drain (SAX skipped if file huge — see comparator helper)
+        if file_size_mb <= 150:
+            benchmark_stream_comparators(xml_file, max_events=None)
+        else:
+            print(f"\nSkipping full stream drain ({file_size_mb:.0f}MB > 150MB cap); early-exit only.")
         benchmark_memory_efficiency(xml_file)
 
         # Full file comparisons
@@ -327,15 +378,15 @@ def run_benchmark_for_dataset(name, url):
         # Performance summary
         if our_duration and xml_duration:
             speedup = xml_duration / our_duration
-            print(f"\n📊 Performance Summary:")
+            print("\n📊 Performance Summary:")
             print(f"   xml_iterator: {our_duration:.3f}s")
             print(f"   xmltodict:    {xml_duration:.3f}s")
             print(f"   Speedup:      {speedup:.2f}x {'faster' if speedup > 1 else 'slower'}")
         elif our_duration and not xml_duration:
-            print(f"\n📊 Performance Summary:")
+            print("\n📊 Performance Summary:")
             print(f"   xml_iterator: {our_duration:.3f}s (succeeded)")
-            print(f"   xmltodict:    failed")
-            print(f"   xml_iterator handled file that xmltodict couldn't!")
+            print("   xmltodict:    failed")
+            print("   xml_iterator handled file that xmltodict couldn't!")
 
         print("\n" + "=" * 50)
         print(f"✅ {name} benchmark completed successfully!")

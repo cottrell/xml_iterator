@@ -32,6 +32,9 @@ test-performance:
 test-fast:
 	pytest -m "not slow"
 
+test-comparators:
+	pytest tests/test_comparators.py
+
 # Run benchmarks comparing against xmltodict
 benchmark:
 	python benchmark.py

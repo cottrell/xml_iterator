@@ -20,6 +20,11 @@ classifiers = [
 test = [
     "pytest>=6.0",
     "xmltodict",  # For compatibility tests
+    "lxml",  # Stream comparator (iterparse)
+]
+bench = [
+    "xmltodict",
+    "lxml",
 ]
 
 
