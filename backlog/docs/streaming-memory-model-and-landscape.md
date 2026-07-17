@@ -1,209 +1,196 @@
-# Streaming memory model, FIRDS shape, and landscape
+# Infinite depth attack, FIRDS, and landscape
 
 **Status:** reference / backlog context  
-**Date:** 2026-07-17  
-**Authors:** Grok (notes from discussion); problem framing from project origin (FIRDS-scale files)
-
-Related: `REVIEW_2026-07-17.md`, `GROK_RESPONSE.md`, `PERF_2026-07-17.md`, task-1* correctness work.
+**Date:** 2026-07-17 (corrected same day)  
+**Related:** `REVIEW_2026-07-17.md`, `GROK_RESPONSE.md`, `PERF_2026-07-17.md`, task-1*, task-4
 
 ---
 
-## 1. The problem this library was actually built for
+## 1. Infinite depth attack (the problem this library is for)
 
-### Not primarily “infinite depth bombs”
+### Definition (project sense)
 
-Security-style “depth attack” language (billion-laughs-ish nesting, recursion limits) is real but **secondary**. The motivating data shape is closer to **breadth under open ancestors**:
+An **infinite depth attack** is any situation where useful content sits **under open outer elements that do not close until much later** (often EOF), so that a tree/DOM-style consumer must either:
+
+1. **Wait for the outer element to close** before the parent node is “complete” → effectively requires reading the rest of the file first, or
+2. **Retain the entire open spine and everything hung off it** until those closes arrive → memory grows with the document (often ~ file size or worse), or
+3. **Recurse / stack with the nesting** in a way that blows up when depth is large or when the logical tree under open nodes is huge.
+
+Streaming defeats it: **emit events as tags open and close; a child can be fully processed on its own `end` while ancestors are still open.** Depth of the open stack can stay open for the whole file; the user controls how much of the tree they keep.
+
+This is **not** a rebrand of “breadth vs depth.” The name is **infinite depth**: you are at depth under wrappers for an effectively unbounded amount of content / time until outers close. Protection is the streaming design (plus user-controlled early stop), not a hard `max_depth` cap.
+
+### Concrete instance: FIRDS-like dumps
 
 ```text
-<root>                          ← opens near start of file
+<root>                              ← opens near start
   <Hdr>...</Hdr>
   <Payload>
-    <RefData>                   ← still open for almost the whole file
-      <FinInstrm> ... </FinInstrm>   ← record 1  (complete here)
-      <FinInstrm> ... </FinInstrm>   ← record 2
+    <RefData>                       ← open for almost the whole file
+      <FinInstrm> ... </FinInstrm>  ← record 1 complete here (outers still open)
+      <FinInstrm> ... </FinInstrm>  ← record 2
       ...
-      <FinInstrm> ... </FinInstrm>   ← record N  (N can be huge / millions-scale)
-    </RefData>                  ← closes near EOF
+      <FinInstrm> ... </FinInstrm>  ← record N (N can be huge / millions-scale)
+    </RefData>                      ← closes near EOF
   </Payload>
-</root>                         ← closes at EOF
+</root>                             ← closes at EOF
 ```
 
-FIRDS-like dumps (memory is approximate; names vary by feed) are typically:
+Typical shape:
 
-- **Shallow-to-moderate nesting** (a handful of wrapper levels).
-- **One (or a few) long lists** of almost-identical record elements deep under those wrappers.
-- Outer tags **do not close until the file is finished**.
+- Nesting: wrappers around wrappers, then a long list of records **at that depth**.
+- Outers **do not close until the file is finished**.
+- You must read records **without** requiring those outside elements to close by reading the entire file.
 
-### What fails on that shape
+### What fails (loses to infinite depth)
 
-| Approach | Failure mode |
+| Approach | Failure |
 |---|---|
-| DOM / full tree (`ET.parse`, `lxml.parse`) | Holds entire document until parse completes. Outer element “owns” millions of children → RAM ~ file size (or worse). |
-| Full `xmltodict.parse` (default) | Same: one giant dict; outer key not finished until EOF. |
-| Building one dict for the whole file via streaming events (`xml_to_dict` without discard) | **Same memory problem** — streaming the *parser* does not help if the *consumer* accumulates everything under open parents. |
-| Waiting for outer `end` to process children | You only finish after reading the whole file. Too late for “process records as they complete.” |
+| DOM / full tree (`ET.parse`, `lxml.parse`) | Outer node incomplete until EOF; holds millions of children. |
+| Full `xmltodict.parse` (default) | Same: one giant dict keyed under still-open structure. |
+| Full-file `xml_to_dict` over a stream | Parser may stream; **consumer rebuilds the whole tree** → same attack succeeds. |
+| “I’ll process children when parent ends” | Parent ends only after all records → whole file first. |
+| Recursive full-tree normalize on huge/deep trees | Stack / RecursionError (secondary, real for dict builder). |
 
-### What must work
-
-**Yield or process each record when that record’s own `end` event fires**, while ancestors remain open.
+### What works
 
 ```text
 time →
   start root
   start Payload
-  start RefData
-  start FinInstrm … end FinInstrm   ← record 1 ready; root still open
-  start FinInstrm … end FinInstrm   ← record 2 ready
+  start RefData          ← stay open…
+  start FinInstrm … end FinInstrm   ← record 1 done; still at depth under RefData
+  start FinInstrm … end FinInstrm   ← record 2 done
   …
   end RefData
   end Payload
   end root
 ```
 
-Requirements implied:
+Requirements:
 
-1. Event stream (or subtree callback) **does not wait** for outer close.
-2. Memory stays O(depth + current record + whatever the user keeps), **not** O(file size), **if** the user drops finished records.
-3. Early exit is allowed after K records without reading the rest of the file.
-4. Optional: path/edge stats over structure without materializing values.
+1. Events (or completed subtrees) **do not wait** on outer close.
+2. Memory is O(open depth + current record + what the user keeps), not O(file), **if** finished records are dropped.
+3. Early exit after K records without finishing the file.
+4. Optional: path/edge stats without materializing values.
 
-This is the real “memory-nice XML in Python” gap people hit: not “no C parser exists,” but **“I need record-at-a-time under a file-spanning wrapper without holding the wrapper’s children.”**
-
-### Depth vs breadth (clarify project language)
-
-| Concept | Meaning | FIRDS relevance |
-|---|---|---|
-| **Depth** | Nesting levels of open tags | Usually modest; recursive dict normalize can still explode if someone builds a pathological deep tree. |
-| **Breadth / open parent** | Many siblings under a still-open parent | **Primary.** Millions of records under tags that close only at EOF. |
-| **Early termination** | Stop iterating before EOF | Useful for sampling, tests, “first 10k events.” Any true stream gets this. |
-| **Constant memory** | Only if consumer discards finished subtrees | Iterator alone is not enough; `xml_to_dict(full file)` reintroduces the problem. |
-
-Docs that say only “infinite depth protection via streaming” undersell the real threat model. Prefer:
-
-> **Open-ancestor streaming:** process complete child elements without waiting for outer wrappers that span the whole file; memory stays bounded if finished children are not retained.
+`max_depth` as “skip nesting levels” is a **different**, weaker knob. It is not the infinite-depth protection mechanism. Protection is: **stream at whatever depth you are, complete inner elements, don’t force outer close first.**
 
 ---
 
-## 2. How `xml_iterator` maps (honest)
+## 2. How `xml_iterator` maps
 
-| API | Fits FIRDS shape? | Notes |
+| API | Defeats infinite depth? | Notes |
 |---|---|---|
-| `iter_xml` | **Yes** | Emits start/end/text as file is read; record `end` fires while root open. User can break early. Memory: O(1) parser + Python event objects if user doesn’t accumulate. |
-| `get_edge_counts` | Partial | Can scan structure; if it holds only path→count maps, fine. Must not panic on empty; must not require full DOM. |
-| `xml_to_dict` (full file) | **No** for multi‑GB / millions of records | Rebuilds a whole tree → same class of OOM as xmltodict default. Fine for small files / tests / parity. |
-| `xml_to_dict(..., max_events=N)` | Partial | Caps work; not a clean “per record” API. |
-| `max_depth` | Wrong tool for FIRDS | Caps nesting, not “discard finished siblings under open parent.” Must not corrupt stack (see review fixes). |
+| `iter_xml` | **Yes** | Child `end` while ancestors open; user can break. Bounded RAM if user doesn’t accumulate. |
+| `get_edge_counts` | Yes for structure scan | Path→count only; must handle `empty`; no full DOM. |
+| `xml_to_dict` (full file) | **No** at FIRDS scale | Rebuilds tree → attack succeeds. OK for small files / tests / xmltodict-ish parity. |
+| `xml_to_dict(..., max_events=N)` | Partial | Caps work; not “per record at depth.” |
+| `max_depth` | Not the protection | Nesting cap; must not corrupt stack if kept. |
 
-**Design identity that matches origin story:**
+**Identity:**
 
-- First-class: streaming events (and maybe “iter records under path X”).
-- Second-class / small-file only: full-document dict conversion.
-- Do not market full `xml_to_dict` as the FIRDS solution.
+- First-class: streaming events under open ancestors at arbitrary depth.
+- Second-class: full-document dict conversion (small files).
+- Do not market full `xml_to_dict` as the FIRDS / infinite-depth solution.
 
-Possible future API (backlog idea, not committed):
+Possible future API:
 
 ```text
-for record in iter_elements(path, tag="FinInstrm"):  # or path matcher
-    process(record)   # subtree completed; ancestors still open; then drop
+for record in iter_elements(..., tag="FinInstrm"):
+    process(record)   # complete at this depth; drop; outers still open
 ```
-
-That is the ergonomics gap `iterparse` forces people to reinvent (and where bigxml / xmltodict `item_depth` live).
 
 ---
 
-## 3. Landscape (what existed / exists)
+## 3. Landscape
 
-Years-ago surprise (“no memory-nice Python XML”) was **half right**:
+Years-ago gap: **memory-nice handling of infinite-depth / file-spanning wrappers** was hard to find as a clear product, even though engines existed.
 
-- **Engines always existed** (stdlib Expat/SAX, `ET.iterparse`, lxml.iterparse).
-- **Discoverable, record-oriented APIs** were thin; default tutorials push full parse → OOM on FIRDS-scale files.
-- `iterparse` only stays memory-safe if you **`elem.clear()`** (and often clear ancestors carefully). Easy to get wrong → still OOM with open parents retaining children.
-
-### Engines (memory OK if used correctly)
+### Engines (OK if used correctly)
 
 | Tool | Role |
 |---|---|
-| `xml.etree.ElementTree.iterparse` | Stdlib stream; clear finished elems. |
-| `lxml.etree.iterparse` | Faster C; same discipline. |
-| `xml.sax` / `xml.parsers.expat` | Callback SAX; true streaming. |
+| `xml.etree.ElementTree.iterparse` | Stream; must `clear()` finished elems or open parents retain children → OOM. |
+| `lxml.etree.iterparse` | Same discipline; usually faster. |
+| `xml.sax` / Expat | Callback stream; true streaming. |
 | `xml.dom.pulldom` | Pull events; niche. |
 
-### Dict / ergonomic layers
+### Layers
 
 | Tool | Role |
 |---|---|
-| **xmltodict** default `parse` | Full tree — **not** for FIRDS-as-one-dict. |
-| **xmltodict** `item_depth` + callback | Stream completed subtrees at a depth — right *shape* for record lists under wrappers. Past RAM bugs if parents accumulate; check current version. |
-| **bigxml** ([Rogdham/bigxml](https://github.com/Rogdham/bigxml), PyPI) | Explicit “big files / streams, don’t DIY memory”; closest product cousin. Handler-based; pure Python; maintained into 2025. |
-| **xml-stream**, **xmlstreamer** | Smaller streaming wrappers; less standard. |
-| **xmlutils** (older) | Serial XML→CSV/SQL via iterparse. |
+| **xmltodict** default | Full tree — loses to infinite depth on large dumps. |
+| **xmltodict** `item_depth` + callback | Complete subtrees at a depth without full document dict — right *shape*. Check current RAM behavior. |
+| **bigxml** | Big files/streams; “iterparse easy to OOM.” Closest product cousin. |
+| **xml-stream**, **xmlstreamer**, **xmlutils** | Smaller / older streaming helpers. |
 
-### Build vs buy (for this repo)
+### Build vs buy
 
 | Need | Prefer |
 |---|---|
-| Max speed, zero deps, FIRDS records | `ET.iterparse` + clear (or lxml) with explicit record tag |
+| Speed, zero deps, records under open wrappers | `ET.iterparse` + clear (or lxml) |
 | Maintained big-file library | Evaluate **bigxml** |
-| Dict-shaped **per record** | xmltodict streaming **or** small helper on top of `iter_xml` |
-| Path/edge counts, custom event loop, Rust experiments | This project |
-| Full file as one dict | Only small files; not the mission |
-
-**Still a niche for `xml_iterator`:** simple `(count, event, value)` stream with user-controlled stop; edge counts; optional Rust-side aggregation later. **Not a niche:** “faster full DOM than everyone else” or “xmltodict but for the entire FIRDS file in RAM.”
+| Dict-shaped **per record** at depth | xmltodict streaming or helper on `iter_xml` |
+| Event tuples, edge counts, Rust experiments | This project |
+| Full file as one dict | Small files only |
 
 ---
 
-## 4. Implications for docs and backlog
+## 4. Docs and backlog implications
 
 ### Docs should say
 
-1. **Primary use case:** stream events / records under file-spanning wrappers (FIRDS-like).
-2. **Memory contract:** parser is streaming; **user must not retain every finished child** if they want bounded RAM.
-3. **`xml_to_dict`:** convenience / compatibility for modest documents — not the large-file path.
-4. Retire or rephrase “infinite depth protection” as **open-ancestor streaming + optional early stop** (depth caps are a different, weaker tool).
-5. Benchmark honestly vs `ET.iterparse` (and early-exit as a generic streaming property).
+1. **Primary threat model:** infinite depth attack — content under outers that stay open until late/EOF (FIRDS-like).
+2. **Protection:** streaming iterator; process on child `end`; user drops finished work; optional early stop.
+3. **Memory contract:** stream is not enough if the consumer keeps every child under open parents.
+4. **`xml_to_dict`:** modest documents / compatibility — not the large-file infinite-depth path.
+5. Benchmark vs `ET.iterparse`; early-exit is a property of streaming generally.
+6. Keep the name **infinite depth attack / protection**; do not replace it with unrelated marketing.
 
-### Backlog-shaped work (ideas)
+### Work ideas
 
-- [ ] **Threat-model doc pass** in README/AGENTS: open-parent breadth + diagram (this file can be linked).
-- [ ] **Example:** “process first N `FinInstrm`-like records without loading file” using `iter_xml` (and/or iterparse comparison).
-- [ ] **API spike (optional):** `iter_subtrees(path, tag=...)` or depth/path filter so Python never sees millions of irrelevant events (also a perf win vs per-event FFI).
-- [ ] **Do not** optimize `xml_to_dict(full FIRDS)` as success metric.
-- [ ] **Compare once** to bigxml + xmltodict `item_depth` on a FIRDS slice; record results under `benchmark_data/` or PERF notes.
-- [ ] Adversarial test: synthetic file with shallow wrappers + M sibling records; assert (a) record ends appear before outer end, (b) processing with discard stays under a memory budget (or at least under a large bound), (c) early break after K records works.
+- [ ] README/AGENTS: define infinite depth attack with FIRDS diagram; link this doc.
+- [ ] Example: N records under open wrappers without loading whole file.
+- [ ] Optional API: iter completed elements at path/tag (depth-aware record stream).
+- [ ] Do not treat `xml_to_dict(full FIRDS)` as success.
+- [ ] Compare once to bigxml + xmltodict `item_depth` on a FIRDS slice.
+- [ ] Regression: sibling records under wrappers; child ends before outer ends; early break works.
 
-### Acceptance sketch for a “FIRDS shape” regression
+### Acceptance sketch
 
 ```text
-XML: <r><list><item>i</item> × 100_000</list></r>
-- iter_xml yields 100_000 item end events before list/r end
-- consumer that counts items and retains nothing finishes without building a 100k-list in one parent dict
-- break after 1000 item ends is allowed without reading entire file (event count / position check)
+XML: <r><list><item>…</item> × 100_000</list></r>
+- 100_000 item end events before list/r end  (infinite depth: still inside open outers)
+- consumer that discards items does not build a 100k parent list
+- break after 1000 item ends without reading entire file
 ```
 
 ---
 
-## 5. Correction log (review discussion)
+## 5. Notes from review discussion (what not to confuse)
 
-Earlier review commentary focused a lot on:
+Engineering issues (silent EOF, attributes, CDATA, panics, FFI cost, recursive normalize) are real and separate.
 
-- per-event FFI speed vs `ET.iterparse`
-- silent errors, attributes, CDATA, `max_depth` corruption
-- recursion in `_normalize_dict`
+They do **not** redefine the product goal.
 
-Those remain valid **engineering** issues. They must not redefine the product goal.
+**Product goal:**
 
-**Product goal restated:**
+> Defeat the infinite depth attack: stream XML so complete inner elements can be handled at depth under open outer elements that may span the whole file — bounded memory if finished work is discarded; no requirement to close outers first.
 
-> Read huge, wrapper-heavy XML (many records under elements that stay open until EOF) with bounded memory and user-controlled termination — without requiring the outer element to close first.
+Speed secondary. Full-document dict parity is a side quest.
 
-Speed is secondary. Full-document dict parity is a side quest. Open-ancestor streaming is the core.
+### Terminology mistake (2026-07-17)
+
+An intermediate draft of this doc wrongly treated “infinite depth” as mere security recursion bombs and tried to rename the problem “open-ancestor breadth.” **That was a misunderstanding of the project’s threat model.** The FIRDS case *is* the infinite depth attack. Corrected above.
 
 ---
 
-## 6. References (external)
+## 6. References
 
-- Python docs: `xml.etree.ElementTree.iterparse` — incremental parse; note tree still builds unless cleared.
-- lxml: `etree.iterparse` performance notes.
-- xmltodict: streaming mode (`item_depth`, callback) for large dumps.
-- bigxml: https://github.com/Rogdham/bigxml — “iterparse is hard not to OOM.”
-- ESMA FIRDS full dumps — multi-file ZIP XML; practical multi‑100MB+ inputs for this project’s benchmarks.
+- Project AGENTS/CLAUDE: infinite depth protection via streaming.
+- Python: `xml.etree.ElementTree.iterparse` (tree still grows unless cleared).
+- lxml iterparse notes.
+- xmltodict streaming (`item_depth`).
+- bigxml: https://github.com/Rogdham/bigxml
+- ESMA FIRDS full dumps — multi-100MB+ practical inputs.

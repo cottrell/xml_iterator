@@ -1,6 +1,6 @@
 ---
 id: TASK-4
-title: 'Document open-ancestor streaming model and FIRDS-shape acceptance'
+title: 'Document infinite depth attack (FIRDS) and acceptance tests'
 status: To Do
 assignee: []
 created_date: '2026-07-17'
@@ -13,27 +13,27 @@ ordinal: 4000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Origin problem is not mainly "infinite depth bombs" — it is **open-ancestor / breadth streaming**: FIRDS-like files open shallow wrappers near the start and only close them at EOF, with millions of record siblings underneath. Consumers must process each record on its own `end` without waiting for outer close and without retaining all siblings.
+**Infinite depth attack** is the core threat model: useful content sits under outer elements that stay open until late/EOF (FIRDS: wrappers, then millions of records at that depth). Tree/DOM consumers must wait for outer close or retain the whole open tree. Streaming yields child completion while ancestors remain open.
 
-Reference write-up: `backlog/docs/streaming-memory-model-and-landscape.md` (includes landscape: iterparse, bigxml, xmltodict item_depth).
+Reference: `backlog/docs/streaming-memory-model-and-landscape.md`.
 
-Rescope README/AGENTS language; add FIRDS-shape regression/example; do not treat full-file `xml_to_dict` as the large-file success path.
+Document that definition (keep the name), add FIRDS-shape regression/example, do not treat full-file `xml_to_dict` as the large-file path.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 README/AGENTS (or CLAUDE) state open-ancestor streaming as primary memory model; link or summarize the backlog doc
-- [ ] #2 "Infinite depth protection" rephrased so depth caps are secondary; breadth under open parents is primary
-- [ ] #3 Example or test: many sibling records under wrappers that close at EOF — record ends fire before outer ends; early break after K records works
-- [ ] #4 Docs clarify full `xml_to_dict` is for modest files / parity, not multi-GB FIRDS-as-one-tree
-- [ ] #5 Optional: note landscape alternatives (ET.iterparse, bigxml, xmltodict streaming) so build-vs-buy stays honest
+- [ ] #1 README/AGENTS define infinite depth attack with FIRDS-like diagram; link or summarize the backlog doc
+- [ ] #2 Protection described as streaming at depth under open outers + user discard/early stop — not primarily max_depth caps
+- [ ] #3 Test or example: many records under wrappers that close at EOF; record ends before outer ends; early break after K works
+- [ ] #4 Docs: full `xml_to_dict` is modest files / parity only, not multi-GB FIRDS-as-one-tree
+- [ ] #5 Optional: landscape note (ET.iterparse, bigxml, xmltodict item_depth)
 <!-- AC:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Read `backlog/docs/streaming-memory-model-and-landscape.md`.
-2. Edit product docs only (minimal); avoid re-litigating completed task-1 bugfixes unless wording still wrong.
-3. Add synthetic FIRDS-shape test (shallow wrappers + large sibling list) under tests/.
-4. Optionally add `examples/` snippet for record-at-a-time consumption.
+1. Read `backlog/docs/streaming-memory-model-and-landscape.md` (use project definition of infinite depth; do not rename away from it).
+2. Minimal doc edits in README/AGENTS.
+3. Synthetic FIRDS-shape test under tests/.
+4. Optional examples/ snippet for record-at-a-time under open wrappers.
 <!-- SECTION:PLAN:END -->
