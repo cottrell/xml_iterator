@@ -99,3 +99,23 @@ pytest                # after: uv pip install -e ".[test]"
 ```
 
 Changelog: [`CHANGELOG.md`](CHANGELOG.md).
+
+### Release (git tag → CI → PyPI + GitHub)
+
+Already wired: tag `v*` runs [`.github/workflows/CI.yml`](.github/workflows/CI.yml) (build/test, then
+`maturin upload` using repo secret `PYPI_API_TOKEN`).
+
+```bash
+# 1. Bump Cargo.toml version, update CHANGELOG.md, commit, push main
+# 2. Annotated tag + push (this publishes wheels to PyPI when CI is green)
+git tag -a v0.2.1 -m "v0.2.1: short summary"
+git push origin v0.2.1
+gh run watch   # optional: wait for CI / Release job
+
+# 3. GitHub Release page (notes only; packages already on PyPI from step 2)
+gh release create v0.2.1 --title "v0.2.1" --notes-file CHANGELOG.md
+# or click "Draft a release" on the tag in the GitHub UI
+```
+
+PyPI: https://pypi.org/project/xml-iterator/  
+Releases: https://github.com/cottrell/xml_iterator/releases
