@@ -1,7 +1,7 @@
 # xml_iterator
 
 Streaming XML for Python. Primary goal: defeat the **infinite depth attack** on large
-dumps (FIRDS-like shape) where useful records sit under outer elements that stay open until
+dumps where useful records sit under outer elements that stay open until
 late/EOF — a tree/DOM consumer either waits for those outers or holds the whole open tree.
 
 ```text
@@ -67,7 +67,7 @@ Reproduce: `make benchmark` (synthetic), `make benchmark-real` (SwissProt),
 from xml_iterator.xml_iterator import iter_xml
 from xml_iterator.core import xml_to_dict  # xml_iterator.xml_to_dict
 
-# Streaming: records under open wrappers (FIRDS-like)
+# Streaming: records under open wrappers
 records = 0
 for count, event, value in iter_xml('file.xml'):
     if event == 'end' and value == 'FinInstrm':
