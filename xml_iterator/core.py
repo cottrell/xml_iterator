@@ -1,6 +1,7 @@
 from collections import defaultdict
 
 from xml_iterator.xml_iterator import iter_xml
+from xml_iterator.xml_iterator import xml_to_dict as _xml_to_dict_rust
 
 
 def get_edge_counts(filename, n_max=None):
@@ -70,18 +71,12 @@ def read_records(filename, n_max=None):
 
 
 def xml_to_dict(filename, max_depth=None, max_events=None):
-    """
-    Convert XML to dictionary structure matching xmltodict.parse output,
-    including attributes (namespace prefixes are stripped).
+    """Convert XML to dictionary structure matching xmltodict.parse output (Rust implementation)."""
+    return _xml_to_dict_rust(filename, max_depth, max_events)
 
-    Args:
-        filename: Path to XML file
-        max_depth: Optional maximum nesting depth (for protection)
-        max_events: Optional maximum number of events to process
 
-    Returns:
-        Dictionary representation of XML
-    """
+def xml_to_dict_py(filename, max_depth=None, max_events=None):
+    """Reference Python implementation of xml_to_dict; kept for parity tests."""
     stack = []
     root = None
     event_count = 0

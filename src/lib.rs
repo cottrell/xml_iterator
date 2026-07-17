@@ -1,7 +1,7 @@
 use encoding_rs_io::DecodeReaderBytes;
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyTuple};
+use pyo3::types::{PyDict, PyList, PyTuple};
 use pyo3::IntoPyObjectExt;
 use quick_xml::{events::Event, Decoder, Reader};
 use std::{
@@ -16,6 +16,7 @@ use std::{
 fn xml_iterator(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(iter_xml, m)?)?;
     m.add_function(wrap_pyfunction!(get_edge_counts, m)?)?;
+    m.add_function(wrap_pyfunction!(xml_to_dict, m)?)?;
     Ok(())
 }
 
@@ -83,6 +84,211 @@ fn get_edge_counts(path: &str, n_max: Option<u32>) -> PyResult<Py<PyAny>> {
         }
         Ok(counter_out.into_any().unbind())
     })
+}
+
+#[pyfunction]
+#[pyo3(signature = (path, max_depth = None, max_events = None))]
+fn xml_to_dict(path: &str, max_depth: Option<usize>, max_events: Option<u64>) -> PyResult<Py<PyAny>> {
+    Python::attach(|py| -> PyResult<Py<PyAny>> {
+        let iterator = get_xml_iterator(path, true).map_err(|e| {
+            PyOSError::new_err(format!("Failed to open XML file: {}", e))
+        })?;
+
+        let mut stack: Vec<Frame> = Vec::new();
+        let mut pending_empty: Option<Frame> = None;
+        let mut skipping: usize = 0;
+        let mut event_count: u64 = 0;
+        let mut root_tag: Option<String> = None;
+        let mut root: Option<Py<PyAny>> = None;
+
+        for item in iterator {
+            let (_, event, payload) = item.map_err(PyValueError::new_err)?;
+            event_count += 1;
+            if let Some(me) = max_events {
+                if event_count > me {
+                    break;
+                }
+            }
+            match event {
+                "start" => {
+                    if skipping > 0 {
+                        skipping += 1;
+                        continue;
+                    }
+                    if let Some(md) = max_depth {
+                        if stack.len() >= md {
+                            skipping = 1;
+                            continue;
+                        }
+                    }
+                    let tag = match payload {
+                        Payload::Str(s) => s,
+                        Payload::Pair(..) => unreachable!(),
+                    };
+                    flush_pending_empty(py, &mut pending_empty, &mut stack, &mut root_tag, &mut root)?;
+                    stack.push(Frame { tag, dict: None, text: None });
+                }
+                "empty" => {
+                    if skipping > 0 {
+                        continue;
+                    }
+                    if let Some(md) = max_depth {
+                        if stack.len() >= md {
+                            continue;
+                        }
+                    }
+                    let tag = match payload {
+                        Payload::Str(s) => s,
+                        Payload::Pair(..) => unreachable!(),
+                    };
+                    flush_pending_empty(py, &mut pending_empty, &mut stack, &mut root_tag, &mut root)?;
+                    pending_empty = Some(Frame { tag, dict: None, text: None });
+                }
+                "attr" => {
+                    if skipping > 0 {
+                        continue;
+                    }
+                    let (name, value) = match payload {
+                        Payload::Pair(n, v) => (n, v),
+                        Payload::Str(..) => unreachable!(),
+                    };
+                    let key = format!("@{name}");
+                    // attrs always precede children by construction (see queue_attributes).
+                    if let Some(frame) = pending_empty.as_mut() {
+                        attach_attr(py, frame, key, value)?;
+                    } else if let Some(frame) = stack.last_mut() {
+                        attach_attr(py, frame, key, value)?;
+                    }
+                }
+                "text" => {
+                    if skipping > 0 {
+                        continue;
+                    }
+                    let text = match payload {
+                        Payload::Str(s) => s,
+                        Payload::Pair(..) => unreachable!(),
+                    };
+                    flush_pending_empty(py, &mut pending_empty, &mut stack, &mut root_tag, &mut root)?;
+                    if let Some(frame) = stack.last_mut() {
+                        match frame.text.as_mut() {
+                            Some(t) => t.push_str(&text),
+                            None => frame.text = Some(text),
+                        }
+                    }
+                }
+                "end" => {
+                    if skipping > 0 {
+                        skipping -= 1;
+                        continue;
+                    }
+                    flush_pending_empty(py, &mut pending_empty, &mut stack, &mut root_tag, &mut root)?;
+                    if let Some(frame) = stack.pop() {
+                        let tag = frame.tag.clone();
+                        let value = finalize(py, frame)?;
+                        attach_or_root(py, &mut stack, &mut root_tag, &mut root, tag, value)?;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Covers both natural EOF (stack already empty, root already set via
+        // the root's "end" event) and a max_events break mid-document.
+        flush_pending_empty(py, &mut pending_empty, &mut stack, &mut root_tag, &mut root)?;
+        while let Some(frame) = stack.pop() {
+            let tag = frame.tag.clone();
+            let value = finalize(py, frame)?;
+            attach_or_root(py, &mut stack, &mut root_tag, &mut root, tag, value)?;
+        }
+
+        match (root_tag, root) {
+            (Some(tag), Some(value)) => {
+                let d = PyDict::new(py);
+                d.set_item(tag, value)?;
+                Ok(d.into_any().unbind())
+            }
+            _ => Ok(PyDict::new(py).into_any().unbind()),
+        }
+    })
+}
+
+struct Frame<'py> {
+    tag: String,
+    dict: Option<Bound<'py, PyDict>>,
+    text: Option<String>,
+}
+
+fn attach_attr<'py>(py: Python<'py>, frame: &mut Frame<'py>, key: String, value: String) -> PyResult<()> {
+    if frame.dict.is_none() {
+        frame.dict = Some(PyDict::new(py));
+    }
+    frame.dict.as_ref().unwrap().set_item(key, value)?;
+    Ok(())
+}
+
+fn finalize<'py>(py: Python<'py>, frame: Frame<'py>) -> PyResult<Py<PyAny>> {
+    match (frame.dict, frame.text) {
+        (Some(d), Some(t)) => {
+            d.set_item("#text", t)?;
+            Ok(d.into_any().unbind())
+        }
+        (Some(d), None) => Ok(d.into_any().unbind()),
+        (None, Some(t)) => t.into_py_any(py),
+        (None, None) => Ok(py.None()),
+    }
+}
+
+fn attach<'py>(py: Python<'py>, parent: &mut Frame<'py>, tag: String, value: Py<PyAny>) -> PyResult<()> {
+    if parent.dict.is_none() {
+        parent.dict = Some(PyDict::new(py));
+    }
+    let dict = parent.dict.as_ref().unwrap();
+    match dict.get_item(tag.as_str())? {
+        None => {
+            dict.set_item(tag, value)?;
+        }
+        Some(existing) => {
+            if let Ok(list) = existing.cast::<PyList>() {
+                list.append(value)?;
+            } else {
+                let newlist = PyList::new(py, [existing.unbind(), value])?;
+                dict.set_item(tag, newlist)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn flush_pending_empty<'py>(
+    py: Python<'py>,
+    pending_empty: &mut Option<Frame<'py>>,
+    stack: &mut Vec<Frame<'py>>,
+    root_tag: &mut Option<String>,
+    root: &mut Option<Py<PyAny>>,
+) -> PyResult<()> {
+    if let Some(frame) = pending_empty.take() {
+        let tag = frame.tag.clone();
+        let value = finalize(py, frame)?;
+        attach_or_root(py, stack, root_tag, root, tag, value)?;
+    }
+    Ok(())
+}
+
+fn attach_or_root<'py>(
+    py: Python<'py>,
+    stack: &mut Vec<Frame<'py>>,
+    root_tag: &mut Option<String>,
+    root: &mut Option<Py<PyAny>>,
+    tag: String,
+    value: Py<PyAny>,
+) -> PyResult<()> {
+    if let Some(parent) = stack.last_mut() {
+        attach(py, parent, tag, value)
+    } else {
+        *root_tag = Some(tag);
+        *root = Some(value);
+        Ok(())
+    }
 }
 
 enum Payload {
