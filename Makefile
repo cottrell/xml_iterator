@@ -33,9 +33,17 @@ test-fast:
 benchmark:
 	python benchmark.py
 
-# Run real-world benchmark with large ESMA FIRDS XML file
+# Run real-world benchmark with SwissProt XML file
 benchmark-real:
-	python benchmark_real_world.py
+	python benchmark_real_world.py --dataset swissprot
+
+# Run real-world benchmark with large ESMA FIRDS XML file
+benchmark-firds:
+	python benchmark_real_world.py --dataset firds
+
+# Run all real-world benchmarks
+benchmark-all:
+	python benchmark_real_world.py --dataset both
 
 clean:
 	cargo clean

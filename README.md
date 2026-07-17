@@ -59,7 +59,9 @@ pytest tests/test_performance.py    # Performance regression tests
 
 # Run benchmarks (separate from tests)
 make benchmark           # Synthetic data vs xmltodict
-make benchmark-real      # Real-world ESMA FIRDS XML
+make benchmark-real      # Real-world SwissProt XML
+make benchmark-firds     # Real-world ESMA FIRDS XML (downloads 17MB)
+make benchmark-all       # Run both real-world benchmarks
 ```
 
 The test suite includes:

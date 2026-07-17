@@ -71,7 +71,9 @@ make test-fast          # Skip slow tests
 
 # Run benchmarks
 make benchmark          # Synthetic data vs xmltodict
-make benchmark-real     # Real ESMA FIRDS data (downloads 17MB)
+make benchmark-real     # Real-world SwissProt XML data
+make benchmark-firds    # Real ESMA FIRDS data (downloads 17MB)
+make benchmark-all      # Run both real-world benchmarks
 
 # Test specific components
 pytest tests/test_basic.py        # Core functionality
