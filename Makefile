@@ -1,54 +1,65 @@
+# Native extension: always release unless you opt into develop-debug.
+# Bare `maturin develop` (no -r) is DEBUG and will poison benches/tests.
+
 all:
 	cat Makefile
 
 build:
-	# NOTE: make sure to build like this else is much slower
+	# wheel → release
 	maturin build --release
 
 develop:
-	# NOTE: --release matters: debug builds are ~9x slower and poison benchmarks
+	# editable install → release (~9x faster than debug; see PERF_2026-07-17.md)
 	maturin develop --uv --release
 
 develop-debug:
 	maturin develop --uv
 
-.PHONY: test test-basic test-xmltodict test-performance test-fast install-test-deps benchmark
+# Force release extension into the active env (idempotent enough for make).
+ensure-release: develop
 
-install-test-deps:
+.PHONY: all build develop develop-debug ensure-release \
+	test test-basic test-xmltodict test-performance test-fast test-comparators \
+	install-test-deps benchmark benchmark-real benchmark-firds benchmark-all clean
+
+install-test-deps: ensure-release
+	# pure-Python extras only after release extension is in place
 	uv pip install -e ".[test]"
+	# editable reinstall can rebuild; re-assert release
+	maturin develop --uv --release
 
-test:
+test: ensure-release
 	pytest
 
-test-basic:
+test-basic: ensure-release
 	pytest tests/test_basic.py
 
-test-xmltodict:
+test-xmltodict: ensure-release
 	pytest tests/test_xmltodict.py
 
-test-performance:
+test-performance: ensure-release
 	pytest tests/test_performance.py
 
-test-fast:
-	pytest -m "not slow"
-
-test-comparators:
+test-comparators: ensure-release
 	pytest tests/test_comparators.py
 
-# Run benchmarks comparing against xmltodict
-benchmark:
+test-fast: ensure-release
+	pytest -m "not slow"
+
+# Run benchmarks comparing against xmltodict + stream comparators
+benchmark: ensure-release
 	python benchmark.py
 
 # Run real-world benchmark with SwissProt XML file
-benchmark-real:
+benchmark-real: ensure-release
 	python benchmark_real_world.py --dataset swissprot
 
 # Run real-world benchmark with large ESMA FIRDS XML file
-benchmark-firds:
+benchmark-firds: ensure-release
 	python benchmark_real_world.py --dataset firds
 
 # Run all real-world benchmarks
-benchmark-all:
+benchmark-all: ensure-release
 	python benchmark_real_world.py --dataset both
 
 clean:
