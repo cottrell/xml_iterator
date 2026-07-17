@@ -278,29 +278,28 @@ impl XMLIterator {
 
 fn get_xml_iterator(path: &str, with_attributes: bool) -> Result<XMLIterator, Box<dyn Error>> {
     let mut fin = File::open(path)?;
-    
-    // Read the first few bytes to check for BOM
-    let mut bom = [0u8; 3];
+    // quick-xml cannot parse UTF-16 (its encoding feature covers only ASCII-compatible
+    // encodings), so UTF-16-BOM files are transcoded to UTF-8. The XML declaration must
+    // then be stripped: it may still say encoding="UTF-16", which would desync quick-xml's
+    // decoder from the transcoded stream. All other files go to quick-xml raw, which
+    // honors declared ASCII-compatible encodings (e.g. ISO-8859-1) itself.
+    let mut bom = [0u8; 2];
     let bytes_read = fin.read(&mut bom)?;
-    fin.seek(SeekFrom::Start(0))?; // Seek back to start
-    
-    let has_bom = if bytes_read >= 3 {
-        (bom[0] == 0xEF && bom[1] == 0xBB && bom[2] == 0xBF) || // UTF-8 BOM
-        (bom[0] == 0xFE && bom[1] == 0xFF) ||                   // UTF-16 BE BOM
-        (bom[0] == 0xFF && bom[1] == 0xFE)                      // UTF-16 LE BOM
-    } else if bytes_read >= 2 {
-        (bom[0] == 0xFE && bom[1] == 0xFF) ||                   // UTF-16 BE BOM
-        (bom[0] == 0xFF && bom[1] == 0xFE)                      // UTF-16 LE BOM
-    } else {
-        false
-    };
-
-    let reader_input: Box<dyn std::io::Read + Send> = if has_bom {
-        Box::new(DecodeReaderBytes::new(fin))
+    fin.seek(SeekFrom::Start(0))?;
+    let utf16_bom = bytes_read >= 2 && (bom == [0xFE, 0xFF] || bom == [0xFF, 0xFE]);
+    let reader_input: Box<dyn std::io::Read + Send> = if utf16_bom {
+        let mut decoded = DecodeReaderBytes::new(fin);
+        let mut head = Vec::with_capacity(4096);
+        (&mut decoded).take(4096).read_to_end(&mut head)?;
+        if head.starts_with(b"<?xml") {
+            if let Some(pos) = head.windows(2).position(|w| w == b"?>") {
+                head.drain(..pos + 2);
+            }
+        }
+        Box::new(std::io::Cursor::new(head).chain(decoded))
     } else {
         Box::new(fin)
     };
-    
     let bufreader = BufReader::new(reader_input);
     let reader = Reader::from_reader(bufreader);
     let reader_iter = XMLIterator {

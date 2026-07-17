@@ -135,6 +135,37 @@ class TestEncoding:
         finally:
             os.unlink(xml_file)
 
+    def test_utf16_with_bom_and_declaration_parses(self):
+        # BOM + encoding="UTF-16" declaration is the common real-world UTF-16 shape;
+        # regression test for the decoder desync between transcoding and quick-xml
+        content = '<?xml version="1.0" encoding="UTF-16"?><r><a>café</a></r>'
+        xml_file = create_test_xml(content.encode('utf-16'), mode='wb')
+        try:
+            events = list(iter_xml(xml_file))
+            texts = [v for _, e, v in events if e == 'text']
+            assert texts == ['café']
+        finally:
+            os.unlink(xml_file)
+
+    def test_utf8_with_bom_parses(self):
+        content = '<?xml version="1.0" encoding="UTF-8"?><r><a>café</a></r>'
+        xml_file = create_test_xml(b'\xef\xbb\xbf' + content.encode('utf-8'), mode='wb')
+        try:
+            events = list(iter_xml(xml_file))
+            texts = [v for _, e, v in events if e == 'text']
+            assert texts == ['café']
+        finally:
+            os.unlink(xml_file)
+
+    def test_utf16_no_bom_fails_loudly(self):
+        content = '<?xml version="1.0" encoding="UTF-16LE"?><r><a>x</a></r>'
+        xml_file = create_test_xml(content.encode('utf-16-le'), mode='wb')
+        try:
+            with pytest.raises(ValueError):
+                list(iter_xml(xml_file))
+        finally:
+            os.unlink(xml_file)
+
 
 class TestCData:
     def test_cdata_preserved(self):

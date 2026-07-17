@@ -8,7 +8,8 @@ An XML parser for Python with streaming iterator interface and protection agains
 - **Infinite depth protection** - iterator-based approach allows user-controlled limits
 - **xmltodict-matching output** - `xml_to_dict()` matches xmltodict output including attributes
   (namespace prefixes are stripped; see Limitations)
-- **Unicode support** - handles UTF-8 encoding correctly
+- **Encoding support** - UTF-8 (with or without BOM), UTF-16 with BOM, and declared
+  ASCII-compatible encodings (e.g. ISO-8859-1); undecodable input raises `ValueError`
 - **Fails loudly** - malformed XML and undecodable text raise `ValueError` (no silent truncation)
 
 ## Performance

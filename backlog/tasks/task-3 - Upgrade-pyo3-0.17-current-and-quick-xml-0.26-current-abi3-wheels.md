@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@antigravity'
 created_date: '2026-07-17 11:32'
-updated_date: '2026-07-17 12:08'
+updated_date: '2026-07-17 12:14'
 labels: []
 dependencies: []
 ordinal: 7000
@@ -41,6 +41,8 @@ Deferred from TASK-1 to keep diffs minimal. pyo3 0.17 predates official Python 3
 
 <!-- SECTION:NOTES:BEGIN -->
 Upgraded deps and resolved all PyO3 Bound API and quick-xml 0.36 changes. Implemented BOM sniffing so that only files with BOM (e.g. UTF-16 with BOM) are transcoded via DecodeReaderBytes, while other files (e.g. ISO-8859-1) are parsed directly by quick-xml using its encoding feature. Also wrapped the internal iterator in a Mutex so that PyXMLIterator is Send + Sync, which is required by newer PyO3 versions.
+
+Fable review (claude-fable-5): upgrade itself solid (pyo3 0.28.1 Bound API, Mutex for Sync, abi3-py37 wheel verified: cp37-abi3-manylinux). Found one regression: UTF-16 files with BOM AND encoding='UTF-16' declaration (the common real-world shape) raised ValueError — DecodeReaderBytes transcoded to UTF-8 but quick-xml's encoding feature then honored the stale declaration and desynced its decoder. Note quick-xml cannot parse UTF-16 at all (encoding feature is ASCII-compatible-only), so raw passthrough was not an option either. Fixed by stripping the XML declaration from the transcoded UTF-16 stream (Cursor+chain head rewrite). Full encoding matrix probed (8 cases), 4 regression tests added, 46 tests green, SwissProt drain perf unchanged (2.60s vs 2.62s pre-upgrade).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
