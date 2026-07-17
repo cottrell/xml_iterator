@@ -146,22 +146,25 @@ pytest                # after: uv pip install -e ".[test]"
 
 Changelog: [`CHANGELOG.md`](CHANGELOG.md).
 
-### Release (git tag → CI → PyPI + GitHub)
+### Release (one script → tag → CI → PyPI)
 
-Already wired: tag `v*` runs [`.github/workflows/CI.yml`](.github/workflows/CI.yml) (build/test, then
-`maturin upload` using repo secret `PYPI_API_TOKEN`).
+Package version lives **only** in `Cargo.toml` (pyproject is dynamic). A git tag `v*` must
+match that version or CI uploads the wrong / already-published wheel.
 
 ```bash
-# 1. Bump Cargo.toml version, update CHANGELOG.md, commit, push main
-# 2. Annotated tag + push (this publishes wheels to PyPI when CI is green)
-git tag -a v0.2.1 -m "v0.2.1: short summary"
-git push origin v0.2.1
-gh run watch   # optional: wait for CI / Release job
+# dry-run
+python scripts/release.py patch --dry-run
 
-# 3. GitHub Release page (notes only; packages already on PyPI from step 2)
-gh release create v0.2.1 --title "v0.2.1" --notes-file CHANGELOG.md
-# or click "Draft a release" on the tag in the GitHub UI
+# bump patch, edit Cargo + CHANGELOG, commit, annotated tag (local)
+make release-patch
+# or: python scripts/release.py patch -m "what changed" -m "another note"
+
+# same + push main and tag → CI tests + maturin upload to PyPI
+make release-push BUMP=patch
+# or: python scripts/release.py 0.3.0 --push --gh-release
+
+gh run watch   # wait for tag Release job
 ```
 
-PyPI: https://pypi.org/project/xml-iterator/  
-Releases: https://github.com/cottrell/xml_iterator/releases
+CI: [`.github/workflows/CI.yml`](.github/workflows/CI.yml) (`PYPI_API_TOKEN` secret).  
+PyPI: https://pypi.org/project/xml-iterator/ · Releases: https://github.com/cottrell/xml_iterator/releases

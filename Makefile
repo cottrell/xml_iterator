@@ -22,7 +22,8 @@ ensure-release: develop
 	test test-basic test-xmltodict test-performance test-fast test-comparators \
 	install-test-deps install-bench-deps \
 	benchmark benchmark-real benchmark-firds benchmark-all \
-	readme-benchmarks show-benchmarks clean
+	readme-benchmarks show-benchmarks \
+	release-patch release-minor release-push clean
 
 install-test-deps: ensure-release
 	# pure-Python extras only after release extension is in place
@@ -75,6 +76,21 @@ readme-benchmarks:
 # Pretty-print last results (no rebuild; no deps beyond stdlib for default mode)
 show-benchmarks:
 	python scripts/print_benchmarks.py
+
+# Release helpers (version is only in Cargo.toml; tag must match or PyPI gets wrong wheel)
+#   make release-patch              # bump patch, commit, tag (no push)
+#   make release-push BUMP=patch    # bump + commit + tag + push (triggers CI → PyPI)
+#   make release-push BUMP=0.3.0
+#   python scripts/release.py patch -m "note" --push --gh-release
+BUMP ?= patch
+release-patch:
+	python scripts/release.py patch
+
+release-minor:
+	python scripts/release.py minor
+
+release-push:
+	python scripts/release.py $(BUMP) --push
 
 clean:
 	cargo clean
