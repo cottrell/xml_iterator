@@ -73,3 +73,4 @@ docs/_build/
 
 # Benchmark data cache
 benchmark_data/
+graphify-out/
