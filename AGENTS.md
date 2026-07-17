@@ -1,3 +1,19 @@
+<!-- AISWARM/NUDGE GUIDELINES START -->
+## Swarm
+
+Swarm CLI: `aiswarm` (on PATH; `make install-aiswarm` from the nudge repo).
+
+Read workflow first:
+- `aiswarm` — common commands cheat sheet
+- `aiswarm instructions overview` — required agent briefing
+- `aiswarm instructions handoff` / `tasks` — peer send and backlog dispatch
+- `aiswarm this` — this swarm's config + runtime.json path
+
+After start, machine map (not git): `/tmp/nudge-swarm/xml-iterator/runtime.json`
+
+Config: `.aiswarm/config.yaml` (cwd walk-up), `$AISWARM_CONFIG`, or explicit path.
+Messaging: `aiswarm send <pane> "msg"` (durable log). Do NOT raw `tmux send-keys`.
+<!-- AISWARM/NUDGE GUIDELINES END -->
 # CLAUDE.md - AI Context for xml_iterator
 
 ## Project Overview
