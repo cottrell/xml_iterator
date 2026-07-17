@@ -162,6 +162,11 @@ def main() -> None:
         ok = run_dataset(*SWISSPROT) and ok
     if args.dataset in ("firds", "both"):
         ok = run_dataset(*FIRDS) and ok
+
+    from bench_common import update_readme_benchmarks
+
+    rp = update_readme_benchmarks()
+    print(f"\nREADME benchmarks section → {rp}")
     raise SystemExit(0 if ok else 1)
 
 

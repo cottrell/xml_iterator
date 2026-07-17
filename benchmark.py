@@ -168,6 +168,11 @@ def main() -> None:
         md_stream_table(stream["backends"]),
     )
 
+    from bench_common import update_readme_benchmarks
+
+    rp = update_readme_benchmarks()
+    print(f"README benchmarks section → {rp}")
+
 
 if __name__ == "__main__":
     main()

@@ -276,3 +276,272 @@ def print_readme_block(title: str, md: str) -> None:
     print("```")
     print(md)
     print("```")
+
+
+# ---------------------------------------------------------------------------
+# README auto-sync (source of truth = benchmark_results.json)
+# ---------------------------------------------------------------------------
+
+README_PATH = Path("README.md")
+BENCH_BEGIN = "<!-- BEGIN BENCHMARKS -->"
+BENCH_END = "<!-- END BENCHMARKS -->"
+
+
+def _fmt_s(sec: Optional[float], digits: int = 3) -> str:
+    if sec is None:
+        return "—"
+    if sec < 0.001:
+        return f"{sec:.4f}s"
+    if sec < 1:
+        return f"{sec:.3f}s"
+    return f"{sec:.{digits}f}s"
+
+
+def _fmt_mb(mb: float) -> str:
+    if mb < 10:
+        return f"{mb:.1f} MB"
+    return f"{mb:.0f} MB"
+
+
+def _fmt_rate(ev_s: Optional[float]) -> str:
+    if not ev_s:
+        return "—"
+    if ev_s >= 1_000_000:
+        return f"{ev_s / 1_000_000:.1f}M/s"
+    if ev_s >= 1_000:
+        return f"{ev_s / 1_000:.0f}k/s"
+    return f"{ev_s:.0f}/s"
+
+
+def _fmt_rel(rel: Optional[float]) -> str:
+    if rel is None:
+        return "—"
+    if abs(rel - 1.0) < 0.05:
+        return "1.00×"
+    if rel > 1:
+        return f"{rel:.2f}× slower"
+    return f"{1 / rel:.2f}× faster"
+
+
+def _stream_md_rows(backends: Dict[str, Any], order: Optional[List[str]] = None) -> str:
+    names = order or list(backends.keys())
+    # Prefer fastest-first among timed backends, keep declared order if given
+    lines = [
+        "| Backend | Time | Events | Rate | vs `xml_iterator` |",
+        "|---------|------|--------|------|-------------------|",
+    ]
+    for name in names:
+        if name not in backends:
+            continue
+        row = backends[name]
+        if not row:
+            continue
+        if row.get("skipped") and "seconds" not in row:
+            lines.append(f"| `{name}` | skipped | — | — | {row['skipped']} |")
+            continue
+        if "error" in row:
+            lines.append(f"| `{name}` | error | — | — | {row['error']} |")
+            continue
+        lines.append(
+            f"| `{name}` | {_fmt_s(row.get('seconds'))} | {row.get('events', 0):,} | "
+            f"{_fmt_rate(row.get('events_per_sec'))} | {_fmt_rel(row.get('relative_to_xml_iterator'))} |"
+        )
+    return "\n".join(lines)
+
+
+def _backend_order(backends: Dict[str, Any]) -> List[str]:
+    """xml_iterator first, then others by ascending time, skipped last."""
+    timed = []
+    skipped = []
+    for name, row in backends.items():
+        if row and "seconds" in row:
+            timed.append((row["seconds"], name))
+        else:
+            skipped.append(name)
+    timed.sort()
+    names = [n for _, n in timed]
+    if "xml_iterator" in names:
+        names.remove("xml_iterator")
+        names = ["xml_iterator"] + names
+    return names + skipped
+
+
+def render_benchmarks_section(data: Optional[Dict[str, Any]] = None) -> str:
+    """Markdown body for the README Benchmarks section (no H2 title)."""
+    data = data if data is not None else load_results()
+    if not data:
+        return "No results yet. Run `make benchmark` and/or `make benchmark-all`, then `make readme-benchmarks`.\n"
+
+    # timestamps
+    stamps = [v.get("timestamp") for v in data.values() if isinstance(v, dict) and v.get("timestamp")]
+    stamp = max(stamps) if stamps else "unknown"
+
+    lines: List[str] = [
+        "Release builds only (`make develop` / `make build`). Debug extensions are ~9× slower.",
+        "",
+        f"Numbers: **{stamp.split()[0] if stamp else 'unknown'}**, machine `bleepblop`. "
+        f"Source of truth: [`benchmark_data/benchmark_results.json`](benchmark_data/benchmark_results.json) "
+        f"(regenerate this section with `make readme-benchmarks`). "
+        f"Narrative: [`PERF_2026-07-17.md`](PERF_2026-07-17.md).",
+        "",
+        "### Full-document dict — `xml_to_dict` vs `xmltodict.parse`",
+        "",
+        "Same output shape on synthetic / SwissProt (attributes included; namespace prefixes stripped). "
+        "Full-file tree build — fine for modest docs / parity; streaming is the large-file path.",
+        "",
+    ]
+
+    # synthetic dict rows
+    synth = []
+    for k, v in data.items():
+        if isinstance(v, dict) and v.get("kind") == "synthetic_dict":
+            synth.append(v)
+    synth.sort(key=lambda r: r.get("n") or 0)
+    if synth:
+        lines += [
+            "**Synthetic**",
+            "",
+            "| Elements | Size | `xml_iterator` | `xmltodict` | Speedup |",
+            "|----------|------|----------------|-------------|---------|",
+        ]
+        preferred = [r for r in synth if r.get("n") in (500, 2000, 5000)]
+        use = preferred if preferred else synth
+        for r in use:
+            lines.append(
+                f"| {r['n']:,} | {_fmt_mb(r['file_size_mb'])} | "
+                f"{_fmt_s(r['xml_iterator_full_seconds'])} | "
+                f"{_fmt_s(r['xmltodict_full_seconds'])} | "
+                f"{r['speedup_factor']:.1f}× |"
+            )
+        lines.append("")
+
+    # real-world dict
+    lines += [
+        "**Real files**",
+        "",
+        "| Dataset | Size | `xml_iterator` | `xmltodict` | Speedup | Notes |",
+        "|---------|------|----------------|-------------|---------|-------|",
+    ]
+    for key in ("SwissProt", "ESMA FIRDS"):
+        r = data.get(key)
+        if not isinstance(r, dict) or r.get("xml_iterator_full_seconds") is None:
+            continue
+        note = ""
+        if r.get("results_identical") is True:
+            note = "results identical"
+        elif r.get("results_identical") is False:
+            note = "results differ (shape)"
+        sp = r.get("speedup_factor")
+        sp_s = f"{sp:.2f}×" if sp is not None else "—"
+        lines.append(
+            f"| {r.get('dataset', key)} | {_fmt_mb(r['file_size_mb'])} | "
+            f"{_fmt_s(r['xml_iterator_full_seconds'])} | "
+            f"{_fmt_s(r.get('xmltodict_full_seconds'))} | {sp_s} | {note} |"
+        )
+    lines.append("")
+
+    early = data.get("Synthetic_early_exit")
+    if isinstance(early, dict):
+        lines += [
+            f"Early stream exit (stop after {early.get('max_events', 1000):,} events on a "
+            f"{early.get('num_items', 0):,}-item file): "
+            f"**{_fmt_s(early.get('stream_early_seconds'), 4)}** vs full `xml_to_dict` "
+            f"**{_fmt_s(early.get('xml_to_dict_seconds'))}** "
+            f"(~{early.get('ratio_dict_over_early', 0):.0f}×). "
+            f"Any streaming parser gets this; not unique to this library.",
+            "",
+        ]
+
+    lines += [
+        "### Stream backends — same event profile",
+        "",
+        "Comparators in `xml_iterator.comparators`: `xml_iterator`, `et_iterparse`, `sax`, "
+        "`lxml_iterparse`. All yield `(count, event, value)`. "
+        "`make benchmark` / `make benchmark-all` time **every** backend (or record an explicit skip).",
+        "",
+        "**SAX note:** the SAX adapter materializes the full parse into a list before iteration, "
+        "so “first N events” still pays full-file cost. Prefer `xml_iterator` / `et` / `lxml` for "
+        "true early exit. Full SAX drain is skipped above 20 MB.",
+        "",
+    ]
+
+    stream = data.get("Synthetic_stream_comparators")
+    if isinstance(stream, dict) and stream.get("backends"):
+        b = stream["backends"]
+        lines += [
+            f"**Synthetic** — {stream.get('num_items', 0):,} books, full drain "
+            f"({_fmt_mb(stream.get('file_size_mb', 0))}, "
+            f"{next(iter(b.values())).get('events', 0):,} events)",
+            "",
+            _stream_md_rows(b, _backend_order(b)),
+            "",
+        ]
+
+    sp = data.get("SwissProt")
+    if isinstance(sp, dict):
+        if sp.get("stream_comparators_full"):
+            b = sp["stream_comparators_full"]
+            xi = b.get("xml_iterator") or {}
+            lines += [
+                f"**SwissProt** — full drain ({_fmt_mb(sp['file_size_mb'])}, {xi.get('events', 0):,} events)",
+                "",
+                _stream_md_rows(b, _backend_order(b)),
+                "",
+            ]
+        if sp.get("stream_comparators_10k"):
+            b = sp["stream_comparators_10k"]
+            lines += [
+                f"**SwissProt** — first 10 000 events ({_fmt_mb(sp['file_size_mb'])})",
+                "",
+                _stream_md_rows(b, _backend_order(b)),
+                "",
+            ]
+
+    firds = data.get("ESMA FIRDS")
+    if isinstance(firds, dict) and firds.get("stream_comparators_10k"):
+        b = firds["stream_comparators_10k"]
+        lines += [
+            f"**ESMA FIRDS** — first 10 000 events only "
+            f"({_fmt_mb(firds['file_size_mb'])}; full multi-backend drain capped at 150 MB)",
+            "",
+            _stream_md_rows(b, _backend_order(b)),
+            "",
+        ]
+
+    lines += [
+        "### Reproduce",
+        "",
+        "```bash",
+        "make benchmark          # synthetic dict + stream + early-exit → JSON",
+        "make benchmark-all      # SwissProt + FIRDS → JSON",
+        "make readme-benchmarks  # rewrite tables below from JSON (no re-run)",
+        "```",
+        "",
+        "Makefile installs `.[bench]` (`xmltodict`, `lxml`) and a **release** extension first.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def update_readme_benchmarks(readme_path: Path = README_PATH) -> Path:
+    """Replace <!-- BEGIN/END BENCHMARKS --> block in README from JSON."""
+    body = render_benchmarks_section()
+    block = f"{BENCH_BEGIN}\n{body.rstrip()}\n{BENCH_END}"
+    text = readme_path.read_text(encoding="utf-8")
+    if BENCH_BEGIN in text and BENCH_END in text:
+        pre, rest = text.split(BENCH_BEGIN, 1)
+        _, post = rest.split(BENCH_END, 1)
+        new = pre + block + post
+    else:
+        # Insert after "## Benchmarks\n"
+        needle = "## Benchmarks\n"
+        if needle not in text:
+            raise SystemExit("README has no ## Benchmarks section and no markers")
+        pre, post = text.split(needle, 1)
+        # drop old content until next ##
+        if "\n## " in post:
+            old, after = post.split("\n## ", 1)
+            new = pre + needle + "\n" + block + "\n\n## " + after
+        else:
+            new = pre + needle + "\n" + block + post
+    readme_path.write_text(new, encoding="utf-8")
+    return readme_path

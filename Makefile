@@ -21,7 +21,7 @@ ensure-release: develop
 .PHONY: all build develop develop-debug ensure-release \
 	test test-basic test-xmltodict test-performance test-fast test-comparators \
 	install-test-deps install-bench-deps \
-	benchmark benchmark-real benchmark-firds benchmark-all clean
+	benchmark benchmark-real benchmark-firds benchmark-all readme-benchmarks clean
 
 install-test-deps: ensure-release
 	# pure-Python extras only after release extension is in place
@@ -65,6 +65,12 @@ benchmark-firds: install-bench-deps
 
 benchmark-all: install-bench-deps
 	python benchmark_real_world.py --dataset both
+	$(MAKE) readme-benchmarks
+
+# Rewrite README tables from benchmark_data/benchmark_results.json (no re-run)
+# Also: python scripts/update_readme_benchmarks.py --print  → stdout only
+readme-benchmarks:
+	python scripts/update_readme_benchmarks.py
 
 clean:
 	cargo clean
